@@ -1,0 +1,10 @@
+.viewer {
+  width: 100vw;
+  height: 100vh;
+}
+
+.message {
+  margin: 0;
+  padding: 1rem;
+  font-family: system-ui, sans-serif;
+}
