@@ -1,0 +1,7 @@
+stub,site,west,south,east,north,start,end,centre_lat,centre_lon,stations,notes
+esdale,Esdale,148.918,-35.108,148.948,-35.085,2025-04-30,2026-07-01,-35.096,148.933,78 campaign points + 7 Phenode loggers,campaign 2025-04-30 to 2025-07-17 on 9 dates; Phenode continuous 2025-06-10 to 2026-07-01 at 10 cm
+llara,Llara,149.840,-30.267,149.881,-30.250,2021-10-19,2024-06-30,-30.259,149.860,31 loggers in two clusters,WW and WE clusters 2.5 km apart; depths 0.15 to 1.55 m
+mri,MRI (Mulloon),149.585,-35.286,149.631,-35.200,2020-09-25,2026-06-03,-35.243,149.608,18 loggers in three clusters,south middle and north clusters over 9.5 km; one bbox for now
+sasmas_stanley,SASMAS Stanley,150.122,-32.102,150.145,-32.090,2003-01-01,2006-12-31,-32.096,150.134,7 stations S1 to S7,the dense cluster of the 26-station SASMAS network; predates Sentinel-2
+tarrawarra,Tarrawarra,145.435,-37.659,145.445,-37.652,1995-09-25,1996-11-29,-37.656,145.440,3610 point measurements on 13 survey dates,bbox from site documentation (converted from AGD66 AMG 55); predates Sentinel-2
+nerrigundah,Nerrigundah,151.711,-32.323,151.722,-32.314,1997-04-24,1998-10-20,-32.318,151.716,13 TDR profiles + 20 m grid campaign,bbox from surveyed DEM extent converted from AGD66 AMG 56; met and rain 1996 to 1998; raw files only; predates Sentinel-2

@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 .tests_cache.json
+troi_ingest/.tests_cache.json
 .venv/
