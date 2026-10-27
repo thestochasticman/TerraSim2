@@ -24,8 +24,26 @@ TerraSim2/
 │   ├── __init__.py
 │   ├── k/
 │   │   ├── __init__.py
-│   │   └── terrain_grid.py
-│   └── f/__init__.py
+│   │   ├── terrain_grid.py          # elevation, capacity, moisture arrays on 10 m cells
+│   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
+│   │   └── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
+│   └── f/
+│       ├── __init__.py
+│       └── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
+├── data/
+│   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
+│   └── dense_sites.md     # the same table with caveats and provenance
+├── troi_ingest/           # Troi -> TerrainGrid on the Sentinel-2 grid; own k/, f/, tests.py; imports terrasim2 and the lab packages
+│   ├── __init__.py
+│   ├── tests.py           # own runner; PASS / SKIP / FAIL; --watch reruns a file on save (a: all, q: quit); cache in troi_ingest/.tests_cache.json
+│   ├── k/__init__.py
+│   └── f/
+│       ├── compute_window.py    # bbox -> (row0, row1, col0, col1) on the 10 m EPSG:6933 lattice, fitted to the bbox
+│       ├── load_elevation.py    # Troi -> elevation array on that window, from the Copernicus DEM store at troi.config
+│       ├── compute_silo_tiles.py # bbox -> (tile_index, SILO points): cell centres snapped to SILO's 0.05 degree lattice
+│       ├── load_rain.py         # (Troi, grid) -> (CellToTileMap, TileSeries "rain" mm) from the SILO store at troi.config
+│       ├── make_test_troi.py    # Troi for the example region with a throwaway registry; used by tests only
+│       └── ingest.py            # Troi -> (TerrainGrid, CellToTileMap, TileSeries rain)
 └── app/                   # Next.js + TypeScript; see App structure
     ├── package.json       # scripts: dev, build, lint, test, test:changed
     ├── vitest.config.mts
