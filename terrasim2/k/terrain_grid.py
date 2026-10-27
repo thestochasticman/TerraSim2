@@ -10,18 +10,31 @@ class TerrainGrid:
 
     Every property is a float64 array of shape (rows, cols). Static
     properties (elevation, capacity) are set once; state (moisture)
-    changes as the model steps.
+    changes as the model steps. Water quantities are depths in
+    millimetres per cell, so they are independent of cell area.
 
     Parameters
     ----------
-    elevation : array_like
-        Ground elevation per cell, metres. Defines the grid shape.
-    cell_size : float
-        Edge length of one square cell, metres.
-    capacity : array_like, optional
-        Bucket capacity per cell, millimetres. Defaults to DEFAULT_CAPACITY_MM everywhere.
-    moisture : array_like, optional
-        Initial water stored per cell, millimetres. Defaults to zeros.
+    elevation : array_like, metres (m)
+        Ground elevation above datum per cell. Defines the grid shape.
+    cell_size : float, metres (m)
+        Edge length of one square cell.
+    capacity : array_like, millimetres (mm), optional
+        Bucket capacity per cell as a water depth. Defaults to
+        DEFAULT_CAPACITY_MM everywhere.
+    moisture : array_like, millimetres (mm), optional
+        Initial water stored per cell as a water depth. Defaults to zeros.
+
+    Attributes
+    ----------
+    rows, cols : int, dimensionless
+        Grid dimensions.
+    shape : tuple[int, int], dimensionless
+        (rows, cols).
+    cell_size : float, m
+    elevation : ndarray (rows, cols), m
+    capacity : ndarray (rows, cols), mm
+    moisture : ndarray (rows, cols), mm
     """
 
     def __init__(
@@ -35,7 +48,7 @@ class TerrainGrid:
         if elev.ndim != 2:
             raise ValueError(f"elevation must be 2-D, got shape {elev.shape}")
         if cell_size <= 0:
-            raise ValueError(f"cell_size must be positive, got {cell_size}")
+            raise ValueError(f"cell_size must be positive metres, got {cell_size}")
         self.rows: int
         self.cols: int
         self.rows, self.cols = elev.shape
@@ -60,6 +73,7 @@ class TerrainGrid:
 
     @property
     def shape(self) -> tuple[int, int]:
+        """(rows, cols), dimensionless."""
         return (self.rows, self.cols)
 
 
