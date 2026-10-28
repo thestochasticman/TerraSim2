@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "rows": 242,
+  "cols": 290,
+  "cell_size": 10.0,
+  "n_tiles": 2,
+  "start": "2025-04-30",
+  "end": "2026-07-01",
+  "n_days": 428,
+  "variables": {
+    "elevation": {
+      "file": "elevation.npy",
+      "units": "m"
+    },
+    "capacity": {
+      "file": "capacity.npy",
+      "units": "mm"
+    },
+    "rain": {
+      "file": "rain.csv",
+      "units": "mm"
+    },
+    "pet": {
+      "file": "pet.csv",
+      "units": "mm"
+    }
+  },
+  "written_at": "2026-10-28T00:40:48+00:00",
+  "meta": {
+    "stub": "esdale",
+    "bbox": [
+      148.918,
+      -35.108,
+      148.948,
+      -35.085
+    ],
+    "start": "2025-04-30",
+    "end": "2026-07-01",
+    "crs": "EPSG:6933",
+    "window": [
+      1153431,
+      1153673,
+      3173814,
+      3174104
+    ],
+    "tiles": [
+      {
+        "tile": 0,
+        "lat": -35.1,
+        "lon": 148.9
+      },
+      {
+        "tile": 1,
+        "lat": -35.1,
+        "lon": 148.95
+      }
+    ],
+    "sources": {
+      "elevation": "Copernicus GLO-30 DEM via pycopdem, bilinear onto the Sentinel-2 grid",
+      "rain": "SILO daily_rain via pysilo, nearest 0.05 degree point",
+      "pet": "SILO et_short_crop (FAO56 short crop) via pysilo, nearest 0.05 degree point"
+    }
+  }
+}
