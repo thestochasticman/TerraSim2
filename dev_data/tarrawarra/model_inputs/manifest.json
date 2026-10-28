@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "rows": 72,
+  "cols": 97,
+  "cell_size": 10.0,
+  "n_tiles": 1,
+  "start": "1995-09-25",
+  "end": "1996-11-29",
+  "n_days": 432,
+  "variables": {
+    "elevation": {
+      "file": "elevation.npy",
+      "units": "m"
+    },
+    "capacity": {
+      "file": "capacity.npy",
+      "units": "mm"
+    },
+    "rain": {
+      "file": "rain.csv",
+      "units": "mm"
+    },
+    "pet": {
+      "file": "pet.csv",
+      "units": "mm"
+    }
+  },
+  "written_at": "2026-10-28T00:41:19+00:00",
+  "meta": {
+    "stub": "tarrawarra",
+    "bbox": [
+      145.435,
+      -37.659,
+      145.445,
+      -37.652
+    ],
+    "start": "1995-09-25",
+    "end": "1996-11-29",
+    "crs": "EPSG:6933",
+    "window": [
+      1179922,
+      1179994,
+      3140208,
+      3140305
+    ],
+    "tiles": [
+      {
+        "tile": 0,
+        "lat": -37.65,
+        "lon": 145.45
+      }
+    ],
+    "sources": {
+      "elevation": "Copernicus GLO-30 DEM via pycopdem, bilinear onto the Sentinel-2 grid",
+      "rain": "SILO daily_rain via pysilo, nearest 0.05 degree point",
+      "pet": "SILO et_short_crop (FAO56 short crop) via pysilo, nearest 0.05 degree point"
+    }
+  }
+}
