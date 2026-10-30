@@ -16,7 +16,9 @@ vi.mock("@react-three/drei", () => ({
 }));
 
 vi.mock("@/c/TerrainSurface", () => ({
-  TerrainSurface: ({ grid }: { grid: TerrainGrid }) => <div data-testid="surface">{`${grid.rows}x${grid.cols}`}</div>,
+  TerrainSurface: ({ grid, moisture }: { grid: TerrainGrid; moisture?: Float32Array }) => (
+    <div data-testid="surface" data-moisture={moisture ? moisture.length : "none"}>{`${grid.rows}x${grid.cols}`}</div>
+  ),
 }));
 
 const { TerrainScene } = await import("./TerrainScene");
@@ -28,6 +30,12 @@ describe("TerrainScene", () => {
     render(<TerrainScene grid={grid} />);
     expect(screen.getByTestId("canvas").contains(screen.getByTestId("surface"))).toBe(true);
     expect(screen.getByTestId("surface").textContent).toBe("3x5");
+    expect(screen.getByTestId("surface").dataset.moisture).toBe("none");
+  });
+
+  it("passes a day's moisture through to the surface", () => {
+    render(<TerrainScene grid={grid} moisture={new Float32Array(15)} />);
+    expect(screen.getByTestId("surface").dataset.moisture).toBe("15");
   });
 
   it("orbits around the grid centre and starts the camera framed to the grid", () => {

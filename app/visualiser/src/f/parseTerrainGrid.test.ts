@@ -20,6 +20,12 @@ describe("parseTerrainGrid", () => {
     expect(grid.elevation).toBeInstanceOf(Float64Array);
     expect(Array.from(grid.elevation)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(grid.elevation[1 * grid.cols + 2]).toBe(6);
+    expect(grid.capacity).toBeUndefined();
+  });
+
+  it("reads capacity when present, with the same layout", () => {
+    const grid = parseTerrainGrid({ ...valid, capacity: [[100, 100, 80], [100, 90, 100]] });
+    expect(Array.from(grid.capacity ?? [])).toEqual([100, 100, 80, 100, 90, 100]);
   });
 
   it("accepts integer and fractional elevations alike", () => {
@@ -59,12 +65,13 @@ describe("parseTerrainGrid", () => {
     );
   });
 
-  it("rejects non-numeric or non-finite elevation values and names the cell", () => {
+  it("rejects non-numeric or non-finite values and names the field and cell", () => {
     expect(() => parseTerrainGrid({ ...valid, elevation: [[1, 2, 3], [4, null, 6]] })).toThrow(
       "elevation[1][1] must be a finite number",
     );
-    expect(() => parseTerrainGrid({ ...valid, elevation: [[1, "2", 3], [4, 5, 6]] })).toThrow(
-      "elevation[0][1] must be a finite number",
+    expect(() => parseTerrainGrid({ ...valid, capacity: [[1, "2", 3], [4, 5, 6]] })).toThrow(
+      "capacity[0][1] must be a finite number",
     );
+    expect(() => parseTerrainGrid({ ...valid, capacity: [[1, 2, 3]] })).toThrow("capacity must be an array of 2 rows");
   });
 });

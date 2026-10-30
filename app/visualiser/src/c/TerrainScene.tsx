@@ -9,6 +9,8 @@ import type { TerrainGrid } from "@/t/TerrainGrid";
 
 export type TerrainSceneProps = {
   grid: TerrainGrid;
+  /** One day's moisture per cell, mm. When given, the surface is coloured by fullness. */
+  moisture?: Float32Array;
 };
 
 /**
@@ -17,7 +19,7 @@ export type TerrainSceneProps = {
  *
  * Needs a browser with WebGL. Load it only on the client.
  */
-export function TerrainScene({ grid }: TerrainSceneProps) {
+export function TerrainScene({ grid, moisture }: TerrainSceneProps) {
   const frame = useMemo(() => frameTerrainCamera(grid), [grid]);
   const lightDistance = frame.far / 10;
 
@@ -25,7 +27,7 @@ export function TerrainScene({ grid }: TerrainSceneProps) {
     <Canvas camera={{ position: frame.position, near: frame.near, far: frame.far, fov: 50 }}>
       <ambientLight intensity={0.5} />
       <directionalLight position={[lightDistance, lightDistance, lightDistance / 2]} intensity={1.2} />
-      <TerrainSurface grid={grid} />
+      <TerrainSurface grid={grid} moisture={moisture} />
       <OrbitControls target={frame.target} />
     </Canvas>
   );
