@@ -3,7 +3,6 @@ import numpy as np
 from terrasim2.k.bucket_flux import BucketFlux
 from terrasim2.k.bucket_model_params import BucketModelParams
 
-
 def step_bucket_model(
     moisture: np.ndarray,
     capacity: np.ndarray,

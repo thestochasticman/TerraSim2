@@ -3,3 +3,4 @@ __pycache__/
 .tests_cache.json
 troi_ingest/.tests_cache.json
 .venv/
+app/api/.tests_cache.json

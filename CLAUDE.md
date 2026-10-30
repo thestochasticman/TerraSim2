@@ -17,6 +17,12 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 - `troi_ingest.ingest_to_disk(troi)` writes to `{troi.out_dir}/model_inputs` and skips the work when a manifest with the same version, stub, bbox and dates is already there.
 - `dev_data/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
 
+## Run outputs and the service
+
+- A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going) and `complete`. `load_run_result` opens it read-only; `RunResult` never copies the arrays.
+- `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings) hashes to a run id; the same request is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
+- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`. Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
+
 ## Python structure
 
 - Python 3.12 or later. Use modern syntax directly (`X | None`, `tuple[int, int]`). No `from __future__ import annotations`.
@@ -45,13 +51,17 @@ TerraSim2/
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
 │   │   ├── step_function.py         # Protocol: (moisture, capacity, rain, pet, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
-│   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols)
+│   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
+│   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
 │   │   └── model_inputs.py          # grid + cell_map + rain + pet + meta, checked for consistency; FORMAT_VERSION
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
-│       ├── run_model.py             # (step, ModelInputs, params) -> RunResult; loop over days calling any StepFunction
+│       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; in memory, or blocks into a zarr store
+│       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/meta
+│       ├── write_run_block.py       # write n consecutive days into the store
+│       ├── load_run_result.py       # open a store read-only as a RunResult; refuses incomplete runs unless asked
 │       ├── write_model_inputs.py    # ModelInputs -> folder (manifest.json, .npy arrays, .csv series)
 │       └── load_model_inputs.py     # folder -> ModelInputs; refuses other FORMAT_VERSIONs
 ├── dev_data/                        # committed prepared inputs, ~13 MB in all
@@ -82,31 +92,45 @@ TerraSim2/
 │       ├── read_dense_sites.py  # data/dense_sites.csv -> list of site dicts (stub, bbox, start, end)
 │       ├── make_site_troi.py    # stub -> Troi from the site table, under a given Config
 │       └── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
-└── app/                   # Next.js + TypeScript; see App structure
-    ├── package.json       # scripts: dev, build, lint, test, test:changed
-    ├── vitest.config.mts
-    ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
-    └── src/
-        ├── app/
-        │   ├── layout.tsx                 # root html, fonts, metadata
-        │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
-        │   └── globals.css
-        ├── c/                             # every .tsx has a .test.tsx beside it
-        │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
-        │   ├── TerrainViewer.module.css
-        │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface
-        │   └── TerrainSurface.tsx         # the mesh; must sit inside a Canvas
-        ├── f/                             # every .ts has a .test.ts beside it
-        │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
-        │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
-        │   ├── frameTerrainCamera.ts      # TerrainGrid -> camera target, position, near, far
-        │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid
-        │   └── readPositiveInteger.ts
-        ├── h/
-        │   └── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
-        └── t/
-            ├── TerrainGrid.ts
-            └── TerrainMesh.ts
+└── app/                   # the visualiser and the service it talks to
+    ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, stress_exponent, initial_fullness, write_every_days, chunk_days, record_fluxes
+    │   └── f/
+    │       ├── compute_run_id.py   # RunRequest -> "{stub}-{12 hex}"; same request, same id
+    │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (dev_data by default)
+    │       ├── execute_run.py      # the worker: inputs + request -> run_model into a store; also `python -m app.api.f.execute_run`
+    │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
+    │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
+    │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
+    │       ├── read_terrain.py     # model_inputs -> elevation and capacity in the visualiser's JSON shape
+    │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
+    │       ├── create_app.py       # FastAPI routes over the above; takes runs_root and inputs_roots
+    │       └── serve.py            # `python -m app.api.f.serve [port]`: runs under {troi out_dir}/terrasim2_runs
+    └── visualiser/        # Next.js + TypeScript; see App structure
+        ├── package.json   # scripts: dev, build, lint, test, test:changed
+        ├── vitest.config.mts
+        ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
+        └── src/
+            ├── app/
+            │   ├── layout.tsx                 # root html, fonts, metadata
+            │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
+            │   └── globals.css
+            ├── c/                             # every .tsx has a .test.tsx beside it
+            │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
+            │   ├── TerrainViewer.module.css
+            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface
+            │   └── TerrainSurface.tsx         # the mesh; must sit inside a Canvas
+            ├── f/                             # every .ts has a .test.ts beside it
+            │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
+            │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
+            │   ├── frameTerrainCamera.ts      # TerrainGrid -> camera target, position, near, far
+            │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid
+            │   └── readPositiveInteger.ts
+            ├── h/
+            │   └── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
+            └── t/
+                ├── TerrainGrid.ts
+                └── TerrainMesh.ts
 ```
 
 ### Tests
@@ -119,12 +143,12 @@ TerraSim2/
 
 ## App structure
 
-- The visualisation app is `app/` at the repo root: Next.js with TypeScript. The terrain renders as a 3D mesh with orbit controls via Three.js.
-- `app/src/c/` holds components, one per file, file named after the component.
-- `app/src/f/` holds pure functions, one per file, same rules as the Python `f/`. No React, no browser APIs.
-- `app/src/h/` holds hooks, one per file, each named `useSomething`.
-- `app/src/t/` holds types shared by more than one file, one type per file, file named after the type. A type used by a single file stays in that file.
-- `app/src/app/` is the Next.js routing folder. Pages compose components and hold no logic.
+- `app/` holds two programs: `app/visualiser/`, the Next.js + TypeScript viewer, and `app/api/`, the Python service it talks to. The terrain renders as a 3D mesh with orbit controls via Three.js.
+- `app/visualiser/src/c/` holds components, one per file, file named after the component.
+- `app/visualiser/src/f/` holds pure functions, one per file, same rules as the Python `f/`. No React, no browser APIs.
+- `app/visualiser/src/h/` holds hooks, one per file, each named `useSomething`.
+- `app/visualiser/src/t/` holds types shared by more than one file, one type per file, file named after the type. A type used by a single file stays in that file.
+- `app/visualiser/src/app/` is the Next.js routing folder. Pages compose components and hold no logic.
 - Function names are verbs here too. Components and hooks are the exceptions: a component is a noun, a hook is `use` plus a noun.
 
 ### Tests
