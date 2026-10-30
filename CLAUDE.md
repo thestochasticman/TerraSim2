@@ -107,30 +107,49 @@ TerraSim2/
     │       ├── create_app.py       # FastAPI routes over the above; takes runs_root and inputs_roots
     │       └── serve.py            # `python -m app.api.f.serve [port]`: runs under {troi out_dir}/terrasim2_runs
     └── visualiser/        # Next.js + TypeScript; see App structure
-        ├── package.json   # scripts: dev, build, lint, test, test:changed
+        ├── package.json   # scripts: dev, dev:all (service + next together), build, lint, test, test:changed
+        ├── next.config.ts # rewrites /api/* to the service (TERRASIM2_API_URL, default http://127.0.0.1:8000)
+        ├── scripts/dev.mjs # starts `python -m app.api.f.serve` and `next dev`; stops both together
         ├── vitest.config.mts
         ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
         └── src/
+            ├── api/                           # the only place fetch is called; one wrapper per route, tests in api.test.ts
+            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts
             ├── app/
             │   ├── layout.tsx                 # root html, fonts, metadata
             │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
+            │   ├── runs/page.tsx              # renders <RunViewer />
             │   └── globals.css
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
-            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface
-            │   └── TerrainSurface.tsx         # the mesh; must sit inside a Canvas
+            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex-coloured by moisture when given
+            │   ├── RunViewer.tsx              # site picker, run button, status; follows the newest day while running, scrubs when complete
+            │   ├── RunViewer.module.css
+            │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
+            │   └── DayScrubber.module.css
             ├── f/                             # every .ts has a .test.ts beside it
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
             │   ├── frameTerrainCamera.ts      # TerrainGrid -> camera target, position, near, far
-            │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid
+            │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid (elevation, optional capacity)
+            │   ├── parseRunStatus.ts          # service status JSON -> RunStatus
+            │   ├── parseRunSeries.ts          # service series JSON -> RunSeries
+            │   ├── decodeMoistureDay.ts       # float32 bytes -> Float32Array for one day
+            │   ├── mapMoistureToColour.ts     # fullness 0..1 -> sequential blue, light (dry) to dark (wet); NaN -> grey
+            │   ├── computeVertexColours.ts    # moisture + capacity -> RGB per vertex
             │   └── readPositiveInteger.ts
             ├── h/
-            │   └── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
+            │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
+            │   ├── useRun.ts                  # start a run, poll while it writes, cache days, expose the newest day
+            │   └── usePlayback.ts             # the scrubber's day (null = follow newest) and play timer
             └── t/
-                ├── TerrainGrid.ts
-                └── TerrainMesh.ts
+                ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
+                ├── TerrainMesh.ts
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase
+                ├── RunStatus.ts
+                └── RunSeries.ts
 ```
 
 ### Tests
@@ -150,6 +169,8 @@ TerraSim2/
 - `app/visualiser/src/t/` holds types shared by more than one file, one type per file, file named after the type. A type used by a single file stays in that file.
 - `app/visualiser/src/app/` is the Next.js routing folder. Pages compose components and hold no logic.
 - Function names are verbs here too. Components and hooks are the exceptions: a component is a noun, a hook is `use` plus a noun.
+- Charts are built with visx: scales, axes and marks as React components in SVG, so every chart is ordinary components styled with the app's CSS and tested like any other component. Scale and data-shaping logic lives in `f/` as pure functions. No canvas charting library.
+- The visualiser talks only to `app/api`, through `/api/*` on its own origin, which Next.js rewrites to the service's port. `src/api/` is the only place `fetch` is called.
 
 ### Tests
 

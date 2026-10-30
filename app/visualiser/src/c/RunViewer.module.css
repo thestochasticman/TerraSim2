@@ -1,0 +1,25 @@
+.viewer {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  width: 100vw;
+  height: 100vh;
+}
+
+.bar {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+}
+
+.scene {
+  min-height: 0;
+}
+
+.message {
+  margin: 0;
+  padding: 1rem;
+  font-family: system-ui, sans-serif;
+}
