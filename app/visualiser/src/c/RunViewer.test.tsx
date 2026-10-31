@@ -5,9 +5,16 @@ import type { TerrainGrid } from "@/t/TerrainGrid";
 
 const fetchSites = vi.fn();
 const useRun = vi.fn<(request: unknown) => RunState>();
+const useRunSeries = vi.fn<(runId: string | null, daysWritten: number) => { series: unknown; error: string | null }>();
 
 vi.mock("@/api/fetchSites", () => ({ fetchSites: () => fetchSites() }));
 vi.mock("@/h/useRun", () => ({ useRun: (r: unknown) => useRun(r) }));
+vi.mock("@/h/useRunSeries", () => ({ useRunSeries: (id: string | null, d: number) => useRunSeries(id, d) }));
+vi.mock("@/c/SeriesChart", () => ({
+  SeriesChart: ({ day, onSeek }: { day: number | null; onSeek?: (d: number) => void }) => (
+    <div data-testid="chart" data-day={day ?? "none"} data-seekable={onSeek ? "yes" : "no"} />
+  ),
+}));
 vi.mock("@/c/TerrainScene", () => ({
   TerrainScene: ({ grid, moisture }: { grid: TerrainGrid; moisture?: Float32Array }) => (
     <div data-testid="scene">{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
@@ -24,6 +31,7 @@ describe("RunViewer", () => {
   beforeEach(() => {
     fetchSites.mockReset().mockResolvedValue(["example", "tarrawarra"]);
     useRun.mockReset().mockReturnValue(idle);
+    useRunSeries.mockReset().mockReturnValue({ series: null, error: null });
   });
 
   const select = () => screen.getByRole("combobox") as HTMLSelectElement;
@@ -79,6 +87,31 @@ describe("RunViewer", () => {
     expect(fetchDay).toHaveBeenCalledWith(1);
     expect(screen.getByText("d1")).toBeTruthy();
     expect(screen.getByRole("button", { name: "play" })).toBeTruthy();
+  });
+
+  it("shows the chart once a series exists, marked on the shown day, seekable only when complete", async () => {
+    const seriesStub = { dates, rain: [0, 0, 0, 0, 0], pet: [1, 1, 1, 1, 1], moisture: [5, 5, 5, 5, 5] };
+    useRunSeries.mockReturnValue({ series: seriesStub, error: null });
+    useRun.mockReturnValue({
+      ...idle,
+      status: { runId: "x", status: "running", daysWritten: 3, nDays: 5, rows: 1, cols: 2, dates },
+      terrain,
+      latest: { t: 2, moisture: Float32Array.from([1, 2]) },
+    });
+    const { rerender } = render(<RunViewer />);
+    expect(useRunSeries).toHaveBeenLastCalledWith("x", 3);
+    const chart = screen.getByTestId("chart");
+    expect(chart.dataset.day).toBe("2");
+    expect(chart.dataset.seekable).toBe("no");
+
+    useRun.mockReturnValue({
+      ...idle,
+      status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates },
+      terrain,
+      latest: { t: 4, moisture: Float32Array.from([4, 40]) },
+    });
+    rerender(<RunViewer />);
+    expect(screen.getByTestId("chart").dataset.seekable).toBe("yes");
   });
 
   it("shows an error from the hook", () => {

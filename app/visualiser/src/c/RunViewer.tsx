@@ -4,8 +4,10 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
 import { DayScrubber } from "@/c/DayScrubber";
+import { SeriesChart } from "@/c/SeriesChart";
 import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
+import { useRunSeries } from "@/h/useRunSeries";
 import type { RunRequest } from "@/t/RunRequest";
 import styles from "./RunViewer.module.css";
 
@@ -19,7 +21,8 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  *
  * While the run is going the surface follows the newest written day and
  * the scrubber is a progress bar. When it completes, the scrubber unlocks:
- * play, pause and a day slider, each day fetched once and cached.
+ * play, pause and a day slider, each day fetched once and cached. The
+ * series chart below grows with the run and marks the day on screen.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
@@ -29,9 +32,10 @@ export function RunViewer() {
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
   const playback = usePlayback(status?.nDays ?? 0, complete);
+  const { series, error: seriesError } = useRunSeries(status?.runId ?? null, status?.daysWritten ?? 0);
   const [scrubbed, setScrubbed] = useState<{ t: number; moisture: Float32Array } | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
-  const error = runError ?? sitesError ?? scrubError;
+  const error = runError ?? sitesError ?? seriesError ?? scrubError;
 
   useEffect(() => {
     fetchSites()
@@ -58,8 +62,7 @@ export function RunViewer() {
   };
 
   const shown = playback.day === null ? latest : scrubbed && scrubbed.t === playback.day ? scrubbed : scrubbed ?? latest;
-  const progress =
-    status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
+  const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
 
   return (
     <div className={styles.viewer}>
@@ -93,6 +96,7 @@ export function RunViewer() {
         />
       )}
       <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} />}</div>
+      {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );
 }
