@@ -26,17 +26,20 @@ export function TerrainSurface({ grid, moisture }: TerrainSurfaceProps) {
     return () => geometry.dispose();
   }, [geometry]);
 
+  // Moisture from another grid (a stale day after a site switch) is ignored rather than drawn or thrown on.
+  const coloured = moisture !== undefined && moisture.length === grid.rows * grid.cols;
+
   useEffect(() => {
-    if (moisture === undefined) {
+    if (!coloured) {
       geometry.deleteAttribute("color");
       return;
     }
     geometry.setAttribute("color", new BufferAttribute(computeVertexColours(moisture, grid.capacity), 3));
-  }, [geometry, grid, moisture]);
+  }, [geometry, grid, moisture, coloured]);
 
   return (
     <mesh geometry={geometry}>
-      <meshStandardMaterial color={moisture === undefined ? "#8c9a62" : "#ffffff"} vertexColors={moisture !== undefined} side={DoubleSide} />
+      <meshStandardMaterial color={coloured ? "#ffffff" : "#8c9a62"} vertexColors={coloured} side={DoubleSide} />
     </mesh>
   );
 }

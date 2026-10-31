@@ -33,7 +33,7 @@ export function RunViewer() {
   const complete = status?.status === "complete";
   const playback = usePlayback(status?.nDays ?? 0, complete);
   const { series, error: seriesError } = useRunSeries(status?.runId ?? null, status?.daysWritten ?? 0);
-  const [scrubbed, setScrubbed] = useState<{ t: number; moisture: Float32Array } | null>(null);
+  const [scrubbed, setScrubbed] = useState<{ runId: string; t: number; moisture: Float32Array } | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
   const error = runError ?? sitesError ?? seriesError ?? scrubError;
 
@@ -46,22 +46,26 @@ export function RunViewer() {
       .catch((err: unknown) => setSitesError(err instanceof Error ? err.message : String(err)));
   }, []);
 
+  const runId = status?.runId ?? null;
+
   useEffect(() => {
     const t = playback.day;
-    if (t === null) return;
+    if (t === null || runId === null) return;
     let cancelled = false;
     fetchDay(t)
-      .then((moisture) => { if (!cancelled) setScrubbed({ t, moisture }); })
+      .then((moisture) => { if (!cancelled) setScrubbed({ runId, t, moisture }); })
       .catch((err: unknown) => { if (!cancelled) setScrubError(err instanceof Error ? err.message : String(err)); });
     return () => { cancelled = true; };
-  }, [playback.day, fetchDay]);
+  }, [playback.day, fetchDay, runId]);
 
   const start = () => {
     if (!stub) return;
     setRequest({ stub, stressExponent: 1, initialFullness: 0.5, writeEveryDays: 1, recordFluxes: true });
   };
 
-  const shown = playback.day === null ? latest : scrubbed && scrubbed.t === playback.day ? scrubbed : scrubbed ?? latest;
+  // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
+  const scrubbedHere = scrubbed !== null && scrubbed.runId === runId ? scrubbed : null;
+  const shown = playback.day === null ? latest : scrubbedHere && scrubbedHere.t === playback.day ? scrubbedHere : scrubbedHere ?? latest;
   const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
 
   return (

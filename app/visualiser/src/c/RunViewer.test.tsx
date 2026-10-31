@@ -89,6 +89,32 @@ describe("RunViewer", () => {
     expect(screen.getByRole("button", { name: "play" })).toBeTruthy();
   });
 
+  it("a scrubbed day from one run is not shown on another run's terrain after a site switch", async () => {
+    const fetchDay = vi.fn(async (t: number) => Float32Array.from([t, t * 10]));
+    useRun.mockReturnValue({
+      ...idle,
+      status: { runId: "esdale-1", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates },
+      terrain,
+      latest: { t: 4, moisture: Float32Array.from([4, 40]) },
+      fetchDay,
+    });
+    const { rerender } = render(<RunViewer />);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "1" } });
+    await waitFor(() => expect(screen.getByTestId("scene").textContent).toBe("1x2:1,10"));
+
+    // The next site's run: a different grid, no day fetched yet, scrubber reset by the hook being disabled.
+    const other: TerrainGrid = { rows: 1, cols: 3, cellSize: 10, elevation: Float64Array.from([1, 2, 3]) };
+    useRun.mockReturnValue({
+      ...idle,
+      status: { runId: "nerrigundah-1", status: "running", daysWritten: 0, nDays: 7, rows: 1, cols: 3, dates: [] },
+      terrain: other,
+      latest: null,
+      fetchDay,
+    });
+    rerender(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene").textContent).toBe("1x3:none"));
+  });
+
   it("shows the chart once a series exists, marked on the shown day, seekable only when complete", async () => {
     const seriesStub = { dates, rain: [0, 0, 0, 0, 0], pet: [1, 1, 1, 1, 1], moisture: [5, 5, 5, 5, 5] };
     useRunSeries.mockReturnValue({ series: seriesStub, error: null });
