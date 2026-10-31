@@ -54,4 +54,13 @@ describe("TerrainSurface", () => {
     expect(after.geometry.getAttribute("color")).toBeUndefined();
     await renderer.unmount();
   });
+
+  it("ignores moisture whose length does not match the grid instead of throwing", async () => {
+    const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [100, 100, 100, 100]);
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={new Float32Array(9)} />);
+    const mesh = renderer.scene.findByType("Mesh").instance as Mesh;
+    expect(mesh.geometry.getAttribute("color")).toBeUndefined();
+    expect((mesh.material as MeshStandardMaterial).vertexColors).toBe(false);
+    await renderer.unmount();
+  });
 });
