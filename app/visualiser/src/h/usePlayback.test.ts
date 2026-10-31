@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePlayback } from "./usePlayback";
 
@@ -56,6 +57,16 @@ describe("usePlayback", () => {
     const held = result.current.day;
     act(() => { vi.advanceTimersByTime(50); });
     expect(result.current.day).toBe(held);
+  });
+
+  it("under StrictMode, which mounts effects twice, still advances exactly one day per frame", () => {
+    const { result } = renderHook(() => usePlayback(100, true, 10), { wrapper: StrictMode });
+    act(() => result.current.togglePlay());
+    expect(result.current.day).toBe(0);
+    act(() => { vi.advanceTimersByTime(10); });
+    expect(result.current.day).toBe(1);
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(result.current.day).toBe(11);
   });
 
   it("disabling resets to following the newest day", async () => {

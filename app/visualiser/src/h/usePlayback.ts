@@ -39,12 +39,13 @@ export function usePlayback(nDays: number, enabled: boolean, frameMs: number = F
 
   const togglePlay = useCallback(() => {
     if (!enabled || nDays === 0) return;
-    setPlaying((was) => {
-      if (was) return false;
-      setDayState((d) => (d === null || d >= nDays - 1 ? 0 : d));
-      return true;
-    });
-  }, [enabled, nDays]);
+    if (playing) {
+      setPlaying(false);
+      return;
+    }
+    setDayState((d) => (d === null || d >= nDays - 1 ? 0 : d));
+    setPlaying(true);
+  }, [enabled, nDays, playing]);
 
   useEffect(() => {
     if (!enabled) {
