@@ -1,0 +1,39 @@
+.chart {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  padding: 0.25rem 1rem 0.5rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  max-height: 300px;
+  display: block;
+  cursor: crosshair;
+}
+
+.legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  justify-content: center;
+  min-width: 9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.value {
+  float: right;
+  color: #888;
+}

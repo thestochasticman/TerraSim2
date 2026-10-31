@@ -128,7 +128,10 @@ TerraSim2/
             │   ├── RunViewer.tsx              # site picker, run button, status; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
-            │   └── DayScrubber.module.css
+            │   ├── DayScrubber.module.css
+            │   ├── SeriesChart.tsx            # two visx panels (moisture mm; fluxes mm/day with rain bars), marker, hover legend, click to seek
+            │   ├── SeriesChart.module.css
+            │   └── SeriesPanel.tsx            # one panel: y axis, grid rows, optional bars, lines, marker; parent owns the SVG
             ├── f/                             # every .ts has a .test.ts beside it
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
@@ -139,11 +142,14 @@ TerraSim2/
             │   ├── decodeMoistureDay.ts       # float32 bytes -> Float32Array for one day
             │   ├── mapMoistureToColour.ts     # fullness 0..1 -> sequential blue, light (dry) to dark (wet); NaN -> grey
             │   ├── computeVertexColours.ts    # moisture + capacity -> RGB per vertex
+            │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
+            │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
             │   ├── useRun.ts                  # start a run, poll while it writes, cache days, expose the newest day
-            │   └── usePlayback.ts             # the scrubber's day (null = follow newest) and play timer
+            │   ├── usePlayback.ts             # the scrubber's day (null = follow newest) and play timer
+            │   └── useRunSeries.ts            # the run's grid-mean series, refetched as days are written
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
                 ├── TerrainMesh.ts
