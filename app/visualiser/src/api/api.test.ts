@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchMoistureDay } from "./fetchMoistureDay";
+import { fetchRetentionCurves } from "./fetchRetentionCurves";
 import { fetchRunSeries } from "./fetchRunSeries";
 import { fetchRunStatus } from "./fetchRunStatus";
 import { fetchSites } from "./fetchSites";
@@ -47,6 +48,16 @@ describe("api wrappers", () => {
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ dates: ["a"], rain: [1], pet: [2], moisture: [3] }));
     expect((await fetchRunSeries("x")).moisture).toEqual([3]);
+  });
+
+  it("fetchRetentionCurves calls /api/soils/retention and parses the records", async () => {
+    const record = { texture: "sand", theta: [0.3, 0.1], theta_fc: 0.04, theta_pwp: 0.004, available_water: 36 };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ suction: [1, 10], field_capacity: 33, wilting_point: 1500, models: { campbell: [record], van_genuchten: [record] } }));
+    const out = await fetchRetentionCurves();
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/soils/retention");
+    expect(out.models.campbell[0].availableWater).toBe(36);
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    await expect(fetchRetentionCurves()).rejects.toThrow("status 500");
   });
 
   it("fetchMoistureDay decodes the bytes and surfaces a 409 as an error", async () => {

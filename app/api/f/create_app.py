@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Response
 
+from app.api.f.compute_retention_curves import compute_retention_curves
 from app.api.f.compute_run_id import compute_run_id
 from app.api.f.find_inputs import DEV_SITES, find_inputs
 from app.api.f.launch_run import launch_run
@@ -26,6 +27,7 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     GET  /runs/{run_id}/terrain       elevation and capacity for the run's site
     GET  /runs/{run_id}/moisture/{t}  one day as little-endian float32 bytes; 409 until written
     GET  /runs/{run_id}/series        grid-mean daily series for the days written
+    GET  /soils/retention             the book's retention curves and available water per texture
 
     Parameters
     ----------
@@ -63,6 +65,10 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
             for manifest in Path(root).glob("*/model_inputs/manifest.json"):
                 found.add(manifest.parents[1].name)
         return sorted(found)
+
+    @app.get("/soils/retention")
+    def retention() -> dict:
+        return compute_retention_curves()
 
     @app.post("/runs")
     def start(request: RunRequest) -> dict:
@@ -121,6 +127,8 @@ def t():
 
     client = TestClient(create_app(Path(tempfile.mkdtemp()) / "runs"))
     assert "tarrawarra" in client.get("/sites").json()
+    retention = client.get("/soils/retention").json()
+    assert len(retention["models"]["campbell"]) == 12 and len(retention["models"]["campbell"][0]["theta"]) == len(retention["suction"])
 
     body = {"stub": "example", "write_every_days": 4}
     started = client.post("/runs", json=body).json()
