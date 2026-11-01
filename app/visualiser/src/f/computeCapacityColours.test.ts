@@ -6,19 +6,19 @@ import { NO_DATA_COLOUR, mapMoistureToColour } from "./mapMoistureToColour";
 const f32 = (rgb: [number, number, number]) => Array.from(Float32Array.from(rgb));
 
 describe("computeCapacityColours", () => {
-  it("scales by the largest capacity: the largest is darkest, zero is lightest", () => {
-    const colours = computeCapacityColours(Float64Array.from([0, 40, 80]));
+  it("stretches the ramp over the finite range: the smallest is lightest, the largest darkest", () => {
+    const colours = computeCapacityColours(Float64Array.from([30, 40, 50]));
     expect(colours).toHaveLength(9);
-    expect(Array.from(colours.slice(6, 9))).toEqual(f32(mapMoistureToColour(1)));
     expect(Array.from(colours.slice(0, 3))).toEqual(f32(mapMoistureToColour(0)));
-    expect(colours[3]).toBeLessThan(colours[0]);
-    expect(colours[3]).toBeGreaterThan(colours[6]);
+    expect(Array.from(colours.slice(6, 9))).toEqual(f32(mapMoistureToColour(1)));
+    expect(Array.from(colours.slice(3, 6))).toEqual(f32(mapMoistureToColour(0.5)));
   });
 
-  it("ignores NaN when finding the maximum and paints it grey; all-zero paints everything grey", () => {
-    const colours = computeCapacityColours(Float64Array.from([Number.NaN, 50]));
+  it("ignores NaN when finding the range and paints it grey; a single value paints everything dark", () => {
+    const colours = computeCapacityColours(Float64Array.from([Number.NaN, 20, 50]));
     expect(Array.from(colours.slice(0, 3))).toEqual(f32(NO_DATA_COLOUR));
-    expect(Array.from(colours.slice(3, 6))).toEqual(f32(mapMoistureToColour(1)));
-    expect(Array.from(computeCapacityColours(Float64Array.from([0, 0])).slice(0, 3))).toEqual(f32(NO_DATA_COLOUR));
+    expect(Array.from(colours.slice(3, 6))).toEqual(f32(mapMoistureToColour(0)));
+    expect(Array.from(computeCapacityColours(Float64Array.from([40, 40])).slice(0, 3))).toEqual(f32(mapMoistureToColour(1)));
+    expect(Array.from(computeCapacityColours(Float64Array.from([Number.NaN])).slice(0, 3))).toEqual(f32(NO_DATA_COLOUR));
   });
 });
