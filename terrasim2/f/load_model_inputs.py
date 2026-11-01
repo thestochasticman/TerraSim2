@@ -6,11 +6,12 @@ import numpy as np
 
 from terrasim2.k.cell_to_tile_map import CellToTileMap
 from terrasim2.k.model_inputs import ModelInputs
+from terrasim2.k.soil_layers import SoilLayers
 from terrasim2.k.terrain_grid import TerrainGrid
 from terrasim2.k.tile_series import TileSeries
 
 
-def load_model_inputs(folder: Path) -> ModelInputs:
+def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInputs:
     """Read a folder written by ``write_model_inputs`` back into a ModelInputs.
 
     Needs only NumPy and the standard library. Refuses a manifest whose
@@ -21,6 +22,10 @@ def load_model_inputs(folder: Path) -> ModelInputs:
     ----------
     folder : Path
         Contains manifest.json and the files it names.
+    root_depth : float, optional, m
+        When given and the inputs carry soil layers, the grid's capacity is
+        recomputed for this root depth instead of taken from capacity.npy,
+        which holds the producer's choice. Refused for inputs without soil.
 
     Returns
     -------
@@ -44,7 +49,20 @@ def load_model_inputs(folder: Path) -> ModelInputs:
     cell_map = CellToTileMap(grid, tile_index, n_tiles=manifest["n_tiles"])
     rain = _read_series(folder / files["rain"]["file"], "rain", files["rain"]["units"])
     pet = _read_series(folder / files["pet"]["file"], "pet", files["pet"]["units"])
-    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}))
+    soil = _read_soil(folder, manifest.get("soil"), grid)
+    if root_depth is not None:
+        if soil is None:
+            raise ValueError(f"model inputs at {folder} carry no soil layers, so a root depth cannot be applied")
+        grid.capacity = soil.compute_capacity(root_depth)
+    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil)
+
+
+def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayers | None:
+    if entry is None:
+        return None
+    names = entry["files"]
+    soil_map = CellToTileMap(grid, np.load(folder / names["tile_index"]), n_tiles=entry["n_tiles"])
+    return SoilLayers(soil_map, entry["layer_bounds"], np.load(folder / names["fraction"]), np.load(folder / names["texture"]))
 
 
 def _read_series(path: Path, name: str, units: str) -> TileSeries:
@@ -77,6 +95,13 @@ def t1():
     assert np.array_equal(back.pet.values, original.pet.values)
     assert back.rain.units == "mm" and back.pet.name == "pet"
     assert back.meta == original.meta
+    assert back.soil is None
+    try:
+        load_model_inputs(folder, root_depth=0.5)
+    except ValueError as err:
+        assert "no soil layers" in str(err)
+    else:
+        raise AssertionError("expected ValueError for a root depth without soil")
 
 
 def t2():
@@ -97,6 +122,26 @@ def t2():
         raise AssertionError("expected ValueError for version mismatch")
 
 
+def t5():
+    """Soil layers round-trip, and a root depth at load recomputes the capacity from them."""
+    import tempfile
+
+    from terrasim2.f.write_model_inputs import _inputs, write_model_inputs
+
+    original = _inputs(with_soil=True)
+    folder = write_model_inputs(original, Path(tempfile.mkdtemp()) / "model_inputs")
+    back = load_model_inputs(folder)
+    assert back.soil is not None and back.soil.n_layers == 3 and back.soil.n_tiles == 2
+    assert np.array_equal(back.soil.cell_map.tile_index, original.soil.cell_map.tile_index)
+    assert np.array_equal(back.soil.layer_bounds, original.soil.layer_bounds)
+    assert np.allclose(back.soil.available_fraction, original.soil.available_fraction, equal_nan=True)
+    assert np.array_equal(back.soil.texture_index, original.soil.texture_index)
+    assert np.all(back.grid.capacity == 80.0), "without a root depth the stored capacity stands"
+    shallow = load_model_inputs(folder, root_depth=0.3)
+    assert np.allclose(shallow.grid.capacity, [[0.035 * 300] * 3, [0.116 * 300] * 3])
+    assert np.isnan(load_model_inputs(folder, root_depth=1.0).grid.capacity[0, 0])
+
+
 DEV_SITES = Path(__file__).resolve().parents[2] / "data" / "dev_sites"
 
 
@@ -114,7 +159,8 @@ def t3():
 
 
 def t4():
-    """Every committed site folder loads, names itself correctly, and covers its dates without gaps."""
+    """Every committed site folder loads with soil layers, names itself correctly, covers its dates without
+    gaps, and its stored capacity is the soil's capacity at the recorded root depth."""
     folders = sorted(p for p in DEV_SITES.glob("*/model_inputs") if p.parent.name != "example")
     assert len(folders) == 6, [p.parent.name for p in folders]
     for folder in folders:
@@ -124,10 +170,15 @@ def t4():
         assert np.all(np.diff(inputs.dates) == np.timedelta64(1, "D")), f"{folder}: dates must be consecutive days"
         assert np.isfinite(inputs.grid.elevation).all(), f"{folder}: DEM has gaps"
         assert inputs.rain.values.shape == (inputs.n_days, inputs.n_tiles)
+        assert inputs.soil is not None and inputs.soil.n_layers == 6, f"{folder}: expected six SLGA layers"
+        recomputed = inputs.soil.compute_capacity(inputs.meta["root_depth"])
+        assert np.allclose(recomputed, inputs.grid.capacity, equal_nan=True), f"{folder}: capacity.npy disagrees with the soil layers"
+        assert np.nanmin(inputs.grid.capacity) > 0, f"{folder}: capacity must be positive where known"
 
 
 def t():
     t1()
     t2()
+    t5()
     t3()
     t4()

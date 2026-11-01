@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "rows": 72,
   "cols": 97,
   "cell_size": 10.0,
@@ -25,7 +25,42 @@
       "units": "mm"
     }
   },
-  "written_at": "2026-10-28T00:41:19+00:00",
+  "soil": {
+    "layer_bounds": [
+      0.0,
+      0.05,
+      0.15,
+      0.3,
+      0.6,
+      1.0,
+      2.0
+    ],
+    "n_tiles": 130,
+    "textures": [
+      "sand",
+      "loamy sand",
+      "sandy loam",
+      "silt loam",
+      "loam",
+      "silt",
+      "sandy clay loam",
+      "silty clay loam",
+      "clay loam",
+      "sandy clay",
+      "silty clay",
+      "clay"
+    ],
+    "files": {
+      "tile_index": "soil_tile_index.npy",
+      "fraction": "soil_fraction.npy",
+      "texture": "soil_texture.npy"
+    },
+    "units": {
+      "layer_bounds": "m",
+      "fraction": "m3 m-3"
+    }
+  },
+  "written_at": "2026-11-01T07:19:36+00:00",
   "meta": {
     "stub": "tarrawarra",
     "bbox": [
@@ -50,10 +85,13 @@
         "lon": 145.45
       }
     ],
+    "root_depth": 0.3,
     "sources": {
       "elevation": "Copernicus GLO-30 DEM via pycopdem, bilinear onto the Sentinel-2 grid",
       "rain": "SILO daily_rain via pysilo, nearest 0.05 degree point",
-      "pet": "SILO et_short_crop (FAO56 short crop) via pysilo, nearest 0.05 degree point"
+      "pet": "SILO et_short_crop (FAO56 short crop) via pysilo, nearest 0.05 degree point",
+      "soil": "SLGA v2 clay, sand, silt and bulk density at six depths via pyslga, nearest 90 m pixel; Campbell curve from the geometric mean diameter (Bittelli et al. 2015 eqs. 2.36, 5.36, 5.37), theta_s = 1 - bulk density / 2650; available water between -33 and -1500 J/kg",
+      "capacity": "soil available water summed over layers down to root_depth"
     }
   }
 }

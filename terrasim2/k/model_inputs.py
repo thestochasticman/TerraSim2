@@ -1,6 +1,7 @@
 import numpy as np
 
 from terrasim2.k.cell_to_tile_map import CellToTileMap
+from terrasim2.k.soil_layers import SoilLayers
 from terrasim2.k.terrain_grid import TerrainGrid
 from terrasim2.k.tile_series import TileSeries
 
@@ -25,24 +26,31 @@ class ModelInputs:
     meta : dict
         Free-form provenance from the producer (stub, bbox, window, sources).
         Carried to and from disk unchanged; never read by the model.
+    soil : SoilLayers, optional
+        The layered soil on ``grid``, from which a capacity can be computed
+        for any root depth. ``grid.capacity`` holds the capacity for the
+        producer's root depth; absent for inputs with no soil product.
 
     Attributes
     ----------
-    grid, cell_map, rain, pet, meta : as given
+    grid, cell_map, rain, pet, meta, soil : as given
     dates : ndarray (T,), datetime64[D]
     n_days, n_tiles : int, dimensionless
     shape : tuple[int, int], dimensionless
     """
 
-    FORMAT_VERSION = 1
+    FORMAT_VERSION = 2
 
-    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None):
+    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None):
         if cell_map.grid is not grid:
             raise ValueError("cell_map must be built on grid")
         if rain.n_tiles != cell_map.n_tiles or pet.n_tiles != cell_map.n_tiles:
             raise ValueError(f"rain ({rain.n_tiles}) and pet ({pet.n_tiles}) must have the map's {cell_map.n_tiles} tiles")
         if not np.array_equal(rain.dates, pet.dates):
             raise ValueError("rain and pet must cover the same dates")
+        if soil is not None and soil.cell_map.grid is not grid:
+            raise ValueError("soil must be laid out on grid")
+        self.soil = soil
         self.grid = grid
         self.cell_map = cell_map
         self.rain = rain
@@ -84,10 +92,19 @@ def t1():
 
 
 def t2():
-    """A map on another grid, a tile-count mismatch, or different dates are rejected."""
+    """A map on another grid, a tile-count mismatch, different dates, or soil on another grid are rejected."""
     grid, cell_map, rain, pet = _parts()
     other_grid = TerrainGrid(elevation=np.zeros((2, 3)), cell_size=10.0)
     other_map = CellToTileMap(other_grid, cell_map.tile_index, n_tiles=2)
+    foreign_soil = SoilLayers(other_map, [0.0, 1.0], np.full((1, 2), 0.1), np.zeros((1, 2), dtype=int))
+    try:
+        ModelInputs(grid, cell_map, rain, pet, soil=foreign_soil)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for soil on another grid")
+    own_soil = SoilLayers(cell_map, [0.0, 1.0], np.full((1, 2), 0.1), np.zeros((1, 2), dtype=int))
+    assert ModelInputs(grid, cell_map, rain, pet, soil=own_soil).soil is own_soil
     wide = TileSeries("pet", "mm", rain.dates, np.ones((2, 3)))
     shifted = TileSeries("pet", "mm", ["2024-01-02", "2024-01-03"], np.ones((2, 2)))
     for args in ((grid, other_map, rain, pet), (grid, cell_map, rain, wide), (grid, cell_map, rain, shifted)):

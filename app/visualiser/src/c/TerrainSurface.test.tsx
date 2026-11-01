@@ -55,6 +55,23 @@ describe("TerrainSurface", () => {
     await renderer.unmount();
   });
 
+  it("colours by capacity when asked, regardless of moisture, and falls back without a capacity", async () => {
+    const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [10, 20, 40, 80]);
+    const moisture = Float32Array.from([80, 80, 80, 80]);
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={moisture} colourBy="capacity" />);
+    const mesh = renderer.scene.findByType("Mesh").instance as Mesh;
+    const colour = mesh.geometry.getAttribute("color");
+    expect(colour.getX(0)).toBeGreaterThan(colour.getX(1));
+    expect(colour.getX(1)).toBeGreaterThan(colour.getX(3));
+    expect((mesh.material as MeshStandardMaterial).vertexColors).toBe(true);
+
+    const bare = makeGrid(2, 2, 1, [0, 0, 0, 0]);
+    await renderer.update(<TerrainSurface grid={bare} colourBy="capacity" />);
+    const after = renderer.scene.findByType("Mesh").instance as Mesh;
+    expect(after.geometry.getAttribute("color")).toBeUndefined();
+    await renderer.unmount();
+  });
+
   it("ignores moisture whose length does not match the grid instead of throwing", async () => {
     const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [100, 100, 100, 100]);
     const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={new Float32Array(9)} />);
