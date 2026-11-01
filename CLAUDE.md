@@ -5,6 +5,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 ## Git
 
 - Work goes on feature branches off `main`, with one pull request each into `main`. There is no `dev` branch.
+- `soil-physics-with-python` is a long-lived branch for programming modules of the textbook *Soil Physics with Python* (Bittelli, Campbell, Tomei, 2015). Work for it goes on branches off `soil-physics-with-python`, with one pull request each into it.
 
 ## Advice
 
