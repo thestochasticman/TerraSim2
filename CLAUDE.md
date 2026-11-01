@@ -22,7 +22,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 
 - A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going) and `complete`. `load_run_result` opens it read-only; `RunResult` never copies the arrays.
 - `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings) hashes to a run id; the same request is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
-- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`. Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
+- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
 
 ## Python structure
 
@@ -113,6 +113,7 @@ TerraSim2/
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
     │       ├── read_terrain.py     # model_inputs -> elevation and capacity in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
+    │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── create_app.py       # FastAPI routes over the above; takes runs_root and inputs_roots
     │       └── serve.py            # `python -m app.api.f.serve [port]`: runs under {troi out_dir}/terrasim2_runs
     └── visualiser/        # Next.js + TypeScript; see App structure
@@ -123,11 +124,12 @@ TerraSim2/
         ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
         └── src/
             ├── api/                           # the only place fetch is called; one wrapper per route, tests in api.test.ts
-            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts
+            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts, fetchRetentionCurves.ts
             ├── app/
             │   ├── layout.tsx                 # root html, fonts, metadata
             │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
             │   ├── runs/page.tsx              # renders <RunViewer />
+            │   ├── soils/page.tsx             # renders <RetentionViewer />
             │   └── globals.css
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
@@ -140,7 +142,11 @@ TerraSim2/
             │   ├── DayScrubber.module.css
             │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain up, evaporation + runoff stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
-            │   └── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
+            │   ├── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
+            │   ├── RetentionViewer.tsx        # fetches the book's curves via useRetentionCurves, caption, status/error, then RetentionChart
+            │   ├── RetentionViewer.module.css
+            │   ├── RetentionChart.tsx         # one line per texture over a log suction axis with FC and WP marked; bars of mm per m per model; radio picks the model; hover highlights a texture in lines, bars and table
+            │   └── RetentionChart.module.css
             ├── f/                             # every .ts has a .test.ts beside it
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
@@ -154,18 +160,26 @@ TerraSim2/
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
             │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index, within an optional visible range
             │   ├── clampDayRange.ts           # requested span -> valid visible range inside the run, at least a week wide
+            │   ├── parseRetentionCurves.ts    # service retention JSON -> RetentionCurves; both models must list the same textures in order
+            │   ├── mapTextureToColour.ts      # (index, count, scheme) -> css rgb on the blue ramp; sand to clay runs light to dark on a light surface, mid to lightest on a dark one
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
             │   ├── useRun.ts                  # start a run, poll while it writes, cache days, expose the newest day
             │   ├── usePlayback.ts             # the scrubber's day (null = follow newest) and play timer
-            │   └── useRunSeries.ts            # the run's grid-mean series, refetched as days are written
+            │   ├── useRunSeries.ts            # the run's grid-mean series, refetched as days are written
+            │   ├── useRetentionCurves.ts      # fetch the book's curves once on mount
+            │   └── useColourScheme.ts         # "light" | "dark" from prefers-color-scheme, following changes; light on the server
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
                 ├── TerrainMesh.ts
                 ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase
                 ├── RunStatus.ts
-                └── RunSeries.ts
+                ├── RunSeries.ts
+                ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order
+                ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
+                ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
+                └── ColourScheme.ts            # "light" | "dark"
 ```
 
 ### Tests
