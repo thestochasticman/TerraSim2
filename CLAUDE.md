@@ -129,9 +129,9 @@ TerraSim2/
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
-            │   ├── SeriesChart.tsx            # two visx panels (stored mm; fluxes mm/day with rain bars), marker, hover legend, click to seek, drag to zoom, double click to reset
+            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain up, evaporation + runoff stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
-            │   └── SeriesPanel.tsx            # one panel: y axis, grid rows, optional bars, lines, marker; parent owns the SVG
+            │   └── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
             ├── f/                             # every .ts has a .test.ts beside it
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals

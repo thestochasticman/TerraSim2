@@ -2,7 +2,7 @@
 
 import { Group } from "@visx/group";
 import { useMemo, useRef, useState } from "react";
-import { MARGIN, SeriesPanel, type SeriesLine } from "@/c/SeriesPanel";
+import { MARGIN, SeriesPanel, type BarGroup, type SeriesLine } from "@/c/SeriesPanel";
 import { clampDayRange } from "@/f/clampDayRange";
 import { computeChartExtent } from "@/f/computeChartExtent";
 import { pickDay } from "@/f/pickDay";
@@ -31,16 +31,19 @@ export type SeriesChartProps = {
 };
 
 const VIEW_WIDTH = 1200;
-const PANEL_HEIGHT = 90;
+const STORE_HEIGHT = 80;
+const FLUX_HEIGHT = 120;
 const GAP = 14;
 /** A press that moves fewer days than this before release is a click, not a zoom. */
 const CLICK_TOLERANCE_DAYS = 2;
 
 /**
- * Two stacked panels sharing an x axis: grid-mean moisture (a stock, mm)
- * above, and the daily fluxes (mm per day) below, rain as bars and the
- * rest as lines. A vertical marker shows the scrubber's day; hovering
- * previews a day in the legend; clicking seeks to it.
+ * Two stacked panels sharing an x axis. Above, grid-mean stored water, a
+ * level in mm, as a line. Below, the daily fluxes in mm per day as bars
+ * from a zero line: rain upward, evaporation and runoff stacked downward,
+ * with demand outlined behind evaporation as the ceiling it could have
+ * reached. A vertical marker shows the scrubber's day; hovering previews
+ * a day in the legend; clicking seeks to it.
  *
  * Zoom: drag across either panel to show just that span of days; double
  * click, or the reset button, to show the whole run again. While a run is
@@ -53,22 +56,26 @@ export function SeriesChart({ series, day, onSeek }: SeriesChartProps) {
   const pressDay = useRef<number | null>(null);
   const nDays = series.dates.length;
   const plotWidth = VIEW_WIDTH - MARGIN.left - MARGIN.right;
-  const totalHeight = MARGIN.top + PANEL_HEIGHT * 2 + GAP + MARGIN.bottom;
+  const totalHeight = MARGIN.top + STORE_HEIGHT + GAP + FLUX_HEIGHT + MARGIN.bottom;
   const extent = useMemo(() => computeChartExtent(series), [series]);
 
   const full: [number, number] = [0, Math.max(0, nDays - 1)];
   const range: [number, number] = zoom && zoom[1] < nDays ? zoom : full;
 
-  const moistureLines: SeriesLine[] = [{ key: "moisture", label: "moisture", colour: SERIES_COLOURS.moisture, values: series.moisture }];
-  const fluxLines: SeriesLine[] = [
-    { key: "pet", label: "demand", colour: SERIES_COLOURS.pet, values: series.pet },
+  const moisture: SeriesLine = { key: "moisture", label: "stored", colour: SERIES_COLOURS.moisture, values: series.moisture };
+  const rain: SeriesLine = { key: "rain", label: "rain", colour: SERIES_COLOURS.rain, values: series.rain };
+  const demand: SeriesLine = { key: "pet", label: "demand", colour: SERIES_COLOURS.pet, values: series.pet };
+  const losses: SeriesLine[] = [
     ...(series.evaporation ? [{ key: "evaporation", label: "evaporation", colour: SERIES_COLOURS.evaporation, values: series.evaporation }] : []),
     ...(series.runoff ? [{ key: "runoff", label: "runoff", colour: SERIES_COLOURS.runoff, values: series.runoff }] : []),
   ];
-  const rainBars: SeriesLine = { key: "rain", label: "rain", colour: SERIES_COLOURS.rain, values: series.rain };
+  const fluxGroups: BarGroup[] = [
+    { direction: "up", stack: [rain] },
+    { direction: "down", stack: losses, outline: demand },
+  ];
 
   const shownDay = hoverDay ?? day;
-  const legend = [moistureLines[0], rainBars, ...fluxLines];
+  const legend: { item: SeriesLine; outline?: boolean }[] = [{ item: moisture }, { item: rain }, ...losses.map((item) => ({ item })), { item: demand, outline: true }];
 
   const dayFromEvent = (e: React.MouseEvent<SVGSVGElement>): number | null => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -121,19 +128,19 @@ export function SeriesChart({ series, day, onSeek }: SeriesChartProps) {
         onDoubleClick={reset}
       >
         <Group left={MARGIN.left} top={MARGIN.top}>
-          <SeriesPanel width={plotWidth} height={PANEL_HEIGHT} range={range} yMax={extent.maxMoisture} lines={moistureLines} markerDay={shownDay} yLabel="stored mm" showXAxis={false} dates={series.dates} />
+          <SeriesPanel width={plotWidth} height={STORE_HEIGHT} range={range} yMin={0} yMax={extent.maxMoisture} lines={[moisture]} markerDay={shownDay} yLabel="stored mm" showXAxis={false} dates={series.dates} />
         </Group>
-        <Group left={MARGIN.left} top={MARGIN.top + PANEL_HEIGHT + GAP}>
-          <SeriesPanel width={plotWidth} height={PANEL_HEIGHT} range={range} yMax={extent.maxFlux} lines={fluxLines} bars={rainBars} markerDay={shownDay} yLabel="mm / day" showXAxis dates={series.dates} />
+        <Group left={MARGIN.left} top={MARGIN.top + STORE_HEIGHT + GAP}>
+          <SeriesPanel width={plotWidth} height={FLUX_HEIGHT} range={range} yMin={-extent.maxOut} yMax={extent.maxIn} lines={[]} barGroups={fluxGroups} markerDay={shownDay} yLabel="in ↑  mm / day  ↓ out" showXAxis dates={series.dates} />
         </Group>
         {selection && (
-          <rect data-testid="selection" x={xOf(selection[0])} y={MARGIN.top} width={Math.max(1, xOf(selection[1]) - xOf(selection[0]))} height={PANEL_HEIGHT * 2 + GAP} fill="currentColor" fillOpacity={0.12} />
+          <rect data-testid="selection" x={xOf(selection[0])} y={MARGIN.top} width={Math.max(1, xOf(selection[1]) - xOf(selection[0]))} height={STORE_HEIGHT + GAP + FLUX_HEIGHT} fill="currentColor" fillOpacity={0.12} />
         )}
       </svg>
       <ul className={styles.legend} aria-label="legend">
-        {legend.map((item) => (
+        {legend.map(({ item, outline }) => (
           <li key={item.key}>
-            <span className={styles.swatch} style={{ background: item.colour }} />
+            <span className={styles.swatch} style={outline ? { border: `1px solid ${item.colour}` } : { background: item.colour }} />
             {item.label}
             <span className={styles.value}>{shownDay !== null && item.values[shownDay] !== undefined ? item.values[shownDay].toFixed(1) : ""}</span>
           </li>
