@@ -31,22 +31,26 @@ const PLOT_LEFT = 48;
 const PLOT_WIDTH = 1200 - 48 - 12;
 /** Pointer x for a day when the whole series is shown. */
 const xForDay = (d: number, nDays: number) => PLOT_LEFT + (d / (nDays - 1)) * PLOT_WIDTH;
+const rainBars = (container: HTMLElement) => container.querySelectorAll('rect[data-series="rain"]').length;
 
 describe("SeriesChart", () => {
-  it("draws two panels: one moisture line, and rain bars with demand, evaporation and runoff lines", () => {
+  it("draws stored water as a line, and every flux as bars: rain up, evaporation and runoff down, demand outlined", () => {
     const { container } = render(<SeriesChart series={series} day={null} />);
     const strokes = [...container.querySelectorAll("path")].map((p) => p.getAttribute("stroke"));
     expect(strokes.filter((s) => s === SERIES_COLOURS.moisture)).toHaveLength(1);
-    expect(strokes.filter((s) => s === SERIES_COLOURS.pet)).toHaveLength(1);
-    expect(strokes.filter((s) => s === SERIES_COLOURS.evaporation)).toHaveLength(1);
-    expect(strokes.filter((s) => s === SERIES_COLOURS.runoff)).toHaveLength(1);
-    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(5);
+    expect(strokes.filter((s) => s === SERIES_COLOURS.pet || s === SERIES_COLOURS.evaporation || s === SERIES_COLOURS.runoff)).toHaveLength(0);
+    expect(rainBars(container)).toBe(5);
+    expect(container.querySelectorAll('rect[data-series="evaporation"]')).toHaveLength(5);
+    expect(container.querySelectorAll('rect[data-series="runoff"]')).toHaveLength(5);
+    const outlines = container.querySelectorAll('rect[data-outline="pet"]');
+    expect(outlines).toHaveLength(5);
+    expect(outlines[0].getAttribute("fill")).toBe("none");
   });
 
   it("has a legend naming every series and showing the marked day's values", () => {
     render(<SeriesChart series={series} day={1} />);
     const legend = screen.getByRole("list", { name: "legend" });
-    expect(legend.textContent).toContain("moisture");
+    expect(legend.textContent).toContain("stored");
     expect(legend.textContent).toContain("rain");
     expect(legend.textContent).toContain("demand");
     expect(legend.textContent).toContain("58.0");
@@ -77,7 +81,7 @@ describe("SeriesChart", () => {
     const onSeek = vi.fn();
     const { container } = render(<SeriesChart series={long} day={null} onSeek={onSeek} />);
     const svg = sized(container);
-    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(30);
+    expect(rainBars(container)).toBe(30);
 
     fireEvent.mouseDown(svg, { clientX: xForDay(10, 30), clientY: 100, button: 0 });
     fireEvent.mouseMove(svg, { clientX: xForDay(20, 30), clientY: 100 });
@@ -86,26 +90,25 @@ describe("SeriesChart", () => {
 
     expect(onSeek).not.toHaveBeenCalled();
     expect(container.querySelector('[data-testid="selection"]')).toBeNull();
-    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(11);
+    expect(rainBars(container)).toBe(11);
     expect(screen.getByRole("button", { name: "reset zoom" }).textContent).toContain("day10 to day20");
   });
 
   it("double click and the reset button both restore the whole run", () => {
     const { container } = render(<SeriesChart series={long} day={null} />);
     const svg = sized(container);
-    const rainBars = () => [...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain).length;
 
     fireEvent.mouseDown(svg, { clientX: xForDay(0, 30), clientY: 100, button: 0 });
     fireEvent.mouseUp(svg, { clientX: xForDay(9, 30), clientY: 100 });
-    expect(rainBars()).toBe(10);
+    expect(rainBars(container)).toBe(10);
     fireEvent.click(screen.getByRole("button", { name: "reset zoom" }));
-    expect(rainBars()).toBe(30);
+    expect(rainBars(container)).toBe(30);
 
     fireEvent.mouseDown(svg, { clientX: xForDay(0, 30), clientY: 100, button: 0 });
     fireEvent.mouseUp(svg, { clientX: xForDay(9, 30), clientY: 100 });
-    expect(rainBars()).toBe(10);
+    expect(rainBars(container)).toBe(10);
     fireEvent.doubleClick(svg);
-    expect(rainBars()).toBe(30);
+    expect(rainBars(container)).toBe(30);
     expect(screen.queryByRole("button", { name: "reset zoom" })).toBeNull();
   });
 
@@ -114,11 +117,13 @@ describe("SeriesChart", () => {
     const svg = sized(container);
     fireEvent.mouseDown(svg, { clientX: xForDay(10, 30), clientY: 100, button: 0 });
     fireEvent.mouseUp(svg, { clientX: xForDay(13, 30), clientY: 100 });
-    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(7);
+    expect(rainBars(container)).toBe(7);
   });
 
-  it("draws without the optional flux series", () => {
+  it("draws without the optional flux series: rain up, demand outlined, nothing stacked down", () => {
     const { container } = render(<SeriesChart series={{ dates: ["a"], rain: [1], pet: [2], moisture: [3] }} day={0} />);
-    expect(container.querySelectorAll("path").length).toBeGreaterThan(0);
+    expect(rainBars(container)).toBe(1);
+    expect(container.querySelectorAll('rect[data-outline="pet"]')).toHaveLength(1);
+    expect(container.querySelectorAll('rect[data-series="evaporation"]')).toHaveLength(0);
   });
 });
