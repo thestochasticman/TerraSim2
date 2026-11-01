@@ -29,6 +29,9 @@ def compute_campbell_water_content(psi: np.ndarray | float, params: CampbellPara
         ``params.theta_s``.
     """
     psi = np.asarray(psi, dtype=np.float64)
+    # Any potential at or above air entry is saturated, including positive
+    # pressures below a water table. This matches the book's own code and
+    # keeps the column integral simple.
     ratio = np.maximum(psi / params.psi_e, 1.0)
     return params.theta_s * ratio ** (-1.0 / params.b)
 
