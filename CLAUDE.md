@@ -129,7 +129,7 @@ TerraSim2/
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
-            │   ├── SeriesChart.tsx            # two visx panels (moisture mm; fluxes mm/day with rain bars), marker, hover legend, click to seek
+            │   ├── SeriesChart.tsx            # two visx panels (stored mm; fluxes mm/day with rain bars), marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
             │   └── SeriesPanel.tsx            # one panel: y axis, grid rows, optional bars, lines, marker; parent owns the SVG
             ├── f/                             # every .ts has a .test.ts beside it
@@ -143,7 +143,8 @@ TerraSim2/
             │   ├── mapMoistureToColour.ts     # fullness 0..1 -> sequential blue, light (dry) to dark (wet); NaN -> grey
             │   ├── computeVertexColours.ts    # moisture + capacity -> RGB per vertex
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
-            │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index
+            │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index, within an optional visible range
+            │   ├── clampDayRange.ts           # requested span -> valid visible range inside the run, at least a week wide
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url

@@ -13,6 +13,25 @@ const series: RunSeries = {
   evaporation: [2, 2, 3, 3, 3],
 };
 
+/** A 30-day series so zooming has room to work. */
+const long: RunSeries = {
+  dates: Array.from({ length: 30 }, (_, i) => `day${i}`),
+  rain: Array.from({ length: 30 }, (_, i) => (i % 7 === 0 ? 8 : 0)),
+  pet: new Array(30).fill(4),
+  moisture: Array.from({ length: 30 }, (_, i) => 40 + i),
+};
+
+/** Give the SVG a known on-screen box so pointer x maps to the viewBox 1:1. */
+function sized(container: HTMLElement): SVGSVGElement {
+  const svg = container.querySelector("svg") as SVGSVGElement;
+  svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 240, right: 1200, bottom: 240, x: 0, y: 0, toJSON: () => ({}) });
+  return svg;
+}
+const PLOT_LEFT = 48;
+const PLOT_WIDTH = 1200 - 48 - 12;
+/** Pointer x for a day when the whole series is shown. */
+const xForDay = (d: number, nDays: number) => PLOT_LEFT + (d / (nDays - 1)) * PLOT_WIDTH;
+
 describe("SeriesChart", () => {
   it("draws two panels: one moisture line, and rain bars with demand, evaporation and runoff lines", () => {
     const { container } = render(<SeriesChart series={series} day={null} />);
@@ -42,15 +61,60 @@ describe("SeriesChart", () => {
     expect(markers[0].getAttribute("x1")).toBe(markers[1].getAttribute("x1"));
   });
 
-  it("clicking the plot seeks to the nearest day", () => {
+  it("a press and release on the same day seeks to it", () => {
     const onSeek = vi.fn();
     const { container } = render(<SeriesChart series={series} day={null} onSeek={onSeek} />);
-    const svg = container.querySelector("svg") as SVGSVGElement;
-    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 240, right: 1200, bottom: 240, x: 0, y: 0, toJSON: () => ({}) });
-    fireEvent.click(svg, { clientX: 1200 - 12, clientY: 100 });
+    const svg = sized(container);
+    fireEvent.mouseDown(svg, { clientX: 1200 - 12, clientY: 100, button: 0 });
+    fireEvent.mouseUp(svg, { clientX: 1200 - 12, clientY: 100 });
     expect(onSeek).toHaveBeenCalledWith(4);
-    fireEvent.click(svg, { clientX: 48, clientY: 100 });
+    fireEvent.mouseDown(svg, { clientX: 48, clientY: 100, button: 0 });
+    fireEvent.mouseUp(svg, { clientX: 48, clientY: 100 });
     expect(onSeek).toHaveBeenCalledWith(0);
+  });
+
+  it("dragging across days zooms to that span, shows a selection while dragging, and does not seek", () => {
+    const onSeek = vi.fn();
+    const { container } = render(<SeriesChart series={long} day={null} onSeek={onSeek} />);
+    const svg = sized(container);
+    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(30);
+
+    fireEvent.mouseDown(svg, { clientX: xForDay(10, 30), clientY: 100, button: 0 });
+    fireEvent.mouseMove(svg, { clientX: xForDay(20, 30), clientY: 100 });
+    expect(container.querySelector('[data-testid="selection"]')).not.toBeNull();
+    fireEvent.mouseUp(svg, { clientX: xForDay(20, 30), clientY: 100 });
+
+    expect(onSeek).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="selection"]')).toBeNull();
+    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(11);
+    expect(screen.getByRole("button", { name: "reset zoom" }).textContent).toContain("day10 to day20");
+  });
+
+  it("double click and the reset button both restore the whole run", () => {
+    const { container } = render(<SeriesChart series={long} day={null} />);
+    const svg = sized(container);
+    const rainBars = () => [...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain).length;
+
+    fireEvent.mouseDown(svg, { clientX: xForDay(0, 30), clientY: 100, button: 0 });
+    fireEvent.mouseUp(svg, { clientX: xForDay(9, 30), clientY: 100 });
+    expect(rainBars()).toBe(10);
+    fireEvent.click(screen.getByRole("button", { name: "reset zoom" }));
+    expect(rainBars()).toBe(30);
+
+    fireEvent.mouseDown(svg, { clientX: xForDay(0, 30), clientY: 100, button: 0 });
+    fireEvent.mouseUp(svg, { clientX: xForDay(9, 30), clientY: 100 });
+    expect(rainBars()).toBe(10);
+    fireEvent.doubleClick(svg);
+    expect(rainBars()).toBe(30);
+    expect(screen.queryByRole("button", { name: "reset zoom" })).toBeNull();
+  });
+
+  it("a zoom narrower than a week widens to a week", () => {
+    const { container } = render(<SeriesChart series={long} day={null} />);
+    const svg = sized(container);
+    fireEvent.mouseDown(svg, { clientX: xForDay(10, 30), clientY: 100, button: 0 });
+    fireEvent.mouseUp(svg, { clientX: xForDay(13, 30), clientY: 100 });
+    expect([...container.querySelectorAll("rect")].filter((r) => r.getAttribute("fill") === SERIES_COLOURS.rain)).toHaveLength(7);
   });
 
   it("draws without the optional flux series", () => {

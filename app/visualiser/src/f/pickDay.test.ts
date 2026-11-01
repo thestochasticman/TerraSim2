@@ -15,6 +15,14 @@ describe("pickDay", () => {
     expect(pickDay(140, 100, 11)).toBe(10);
   });
 
+  it("maps within a zoomed range and clamps to it", () => {
+    expect(pickDay(0, 100, 100, [30, 40])).toBe(30);
+    expect(pickDay(100, 100, 100, [30, 40])).toBe(40);
+    expect(pickDay(50, 100, 100, [30, 40])).toBe(35);
+    expect(pickDay(-10, 100, 100, [30, 40])).toBe(30);
+    expect(pickDay(110, 100, 100, [30, 40])).toBe(40);
+  });
+
   it("handles one day, no days and no width", () => {
     expect(pickDay(30, 100, 1)).toBe(0);
     expect(pickDay(30, 100, 0)).toBeNull();
