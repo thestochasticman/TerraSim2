@@ -150,7 +150,7 @@ TerraSim2/
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex-coloured by moisture when given, or by capacity with colourBy="capacity"
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity with colourBy="capacity", else an earth tone (switching the material mode after it has drawn leaves it white)
             │   ├── RunViewer.tsx              # site picker, root depth field, run button, status, colour-by select with a capacity legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
@@ -183,6 +183,7 @@ TerraSim2/
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
             │   ├── computeCapacityColours.ts  # capacity per cell -> RGB per vertex on the ramp, scaled by the largest finite capacity; NaN -> grey
             │   ├── computeFiniteRange.ts      # {min, max} of the finite values, or null
+            │   ├── createUniformColours.ts    # one RGB repeated per vertex, the colour attribute's layout
             │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index, within an optional visible range
             │   ├── clampDayRange.ts           # requested span -> valid visible range inside the run, at least a week wide
             │   ├── parseRetentionCurves.ts    # service retention JSON -> RetentionCurves; both models must list the same textures in order
