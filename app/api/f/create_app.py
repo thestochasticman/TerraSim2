@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Response
 
 from app.api.f.compute_retention_curves import compute_retention_curves
 from app.api.f.compute_run_id import compute_run_id
+from app.api.f.compute_soil_column import compute_soil_column
 from app.api.f.compute_texture_triangle import compute_texture_triangle
 from app.api.f.find_inputs import DEV_SITES, find_inputs
 from app.api.f.launch_run import launch_run
@@ -30,6 +31,7 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     GET  /runs/{run_id}/series        grid-mean daily series for the days written
     GET  /soils/retention             the book's retention curves and available water per texture
     GET  /soils/texture               the USDA texture triangle on a one-percent grid, classified
+    GET  /soils/column                one layered column's available water; query textures (comma list), root_depth, model
 
     Parameters
     ----------
@@ -75,6 +77,13 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     @app.get("/soils/texture")
     def texture() -> dict:
         return compute_texture_triangle()
+
+    @app.get("/soils/column")
+    def column(textures: str, root_depth: float, model: str = "campbell") -> dict:
+        try:
+            return compute_soil_column(textures.split(","), root_depth, model)
+        except ValueError as err:
+            raise HTTPException(422, str(err)) from err
 
     @app.post("/runs")
     def start(request: RunRequest) -> dict:
@@ -137,6 +146,9 @@ def t():
     assert len(retention["models"]["campbell"]) == 12 and len(retention["models"]["campbell"][0]["theta"]) == len(retention["suction"])
     triangle = client.get("/soils/texture").json()
     assert len(triangle["points"]["texture"]) == 5151 and len(triangle["typical"]) == 12
+    column = client.get("/soils/column", params={"textures": "sand,sand,loam,clay,clay,clay", "root_depth": 0.6}).json()
+    assert len(column["layers"]) == 6 and column["total"] > 0
+    assert client.get("/soils/column", params={"textures": "sand", "root_depth": 0.6}).status_code == 422
 
     body = {"stub": "example", "write_every_days": 4}
     started = client.post("/runs", json=body).json()

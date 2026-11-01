@@ -1,0 +1,73 @@
+.chart {
+  display: grid;
+  grid-template-columns: minmax(0, 560px) auto;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+  padding: 0.25rem 1rem 0.5rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 16rem;
+  max-width: 34rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.total {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.unit {
+  font-size: 1rem;
+  font-weight: normal;
+  color: #888;
+}
+
+.note {
+  color: #888;
+}
+
+.table {
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: right;
+  padding: 0.15rem 0.45rem;
+  white-space: nowrap;
+}
+
+.table th {
+  font-weight: normal;
+  color: #888;
+}
+
+.table th:first-child,
+.table td:first-child,
+.table th:nth-child(2),
+.table td:nth-child(2) {
+  text-align: left;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.4rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
