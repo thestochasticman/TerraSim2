@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 
 from app.api.f.compute_run_id import compute_run_id
-from app.api.f.find_inputs import DEV_DATA, find_inputs
+from app.api.f.find_inputs import DEV_SITES, find_inputs
 from app.api.f.launch_run import launch_run
 from app.api.f.read_moisture_day import read_moisture_day
 from app.api.f.read_run_status import read_run_status
@@ -13,7 +13,7 @@ from app.api.f.read_terrain import read_terrain
 from app.api.k.run_request import RunRequest
 
 
-def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_DATA,)) -> FastAPI:
+def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -> FastAPI:
     """Build the service.
 
     Routes

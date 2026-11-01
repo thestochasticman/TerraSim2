@@ -22,7 +22,7 @@ def ingest_to_disk(troi: Troi, folder: Path | None = None) -> Path:
     troi : Troi
     folder : Path, optional
         Where to write. Use this to put a copy somewhere other than the
-        Troi's output directory, for example into ``dev_data/``.
+        Troi's output directory, for example into ``data/dev_sites/``.
 
     Returns
     -------

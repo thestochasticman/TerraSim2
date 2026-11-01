@@ -15,7 +15,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 - The model assumes its inputs are already prepared. `troi_ingest` prepares them from a `Troi`; `terrasim2` consumes them. The handoff is a `ModelInputs` object: a `TerrainGrid`, a `CellToTileMap` on it, and `rain` and `pet` as `TileSeries` on the same tiles and dates, plus free-form `meta` provenance.
 - On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
 - `troi_ingest.ingest_to_disk(troi)` writes to `{troi.out_dir}/model_inputs` and skips the work when a manifest with the same version, stub, bbox and dates is already there.
-- `dev_data/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
+- `data/dev_sites/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
 
 ## Run outputs and the service
 
@@ -64,17 +64,17 @@ TerraSim2/
 │       ├── load_run_result.py       # open a store read-only as a RunResult; refuses incomplete runs unless asked
 │       ├── write_model_inputs.py    # ModelInputs -> folder (manifest.json, .npy arrays, .csv series)
 │       └── load_model_inputs.py     # folder -> ModelInputs; refuses other FORMAT_VERSIONs
-├── dev_data/                        # committed prepared inputs, ~13 MB in all
-│   ├── example/model_inputs/        # lab example region, January 2024
-│   ├── esdale/model_inputs/         # one folder per site in data/dense_sites.csv ...
-│   ├── llara/model_inputs/
-│   ├── mri/model_inputs/
-│   ├── sasmas_stanley/model_inputs/
-│   ├── tarrawarra/model_inputs/
-│   └── nerrigundah/model_inputs/
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
-│   └── dense_sites.md     # the same table with caveats and provenance
+│   ├── dense_sites.md     # the same table with caveats and provenance
+│   └── dev_sites/         # committed prepared inputs, ~13 MB in all
+│       ├── example/model_inputs/        # lab example region, January 2024
+│       ├── esdale/model_inputs/         # one folder per site in data/dense_sites.csv ...
+│       ├── llara/model_inputs/
+│       ├── mri/model_inputs/
+│       ├── sasmas_stanley/model_inputs/
+│       ├── tarrawarra/model_inputs/
+│       └── nerrigundah/model_inputs/
 ├── troi_ingest/           # Troi -> TerrainGrid on the Sentinel-2 grid; own k/, f/, tests.py; imports terrasim2 and the lab packages
 │   ├── __init__.py
 │   ├── tests.py           # own runner; PASS / SKIP / FAIL; --watch reruns a file on save (a: all, q: quit); cache in troi_ingest/.tests_cache.json
@@ -97,7 +97,7 @@ TerraSim2/
     │   ├── k/run_request.py        # pydantic RunRequest: stub, stress_exponent, initial_fullness, write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # RunRequest -> "{stub}-{12 hex}"; same request, same id
-    │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (dev_data by default)
+    │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (data/dev_sites by default)
     │       ├── execute_run.py      # the worker: inputs + request -> run_model into a store; also `python -m app.api.f.execute_run`
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
