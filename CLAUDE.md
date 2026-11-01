@@ -56,7 +56,8 @@ TerraSim2/
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
 │   │   ├── model_inputs.py          # grid + cell_map + rain + pet + meta, checked for consistency; FORMAT_VERSION
 │   │   ├── soil_texture.py          # StrEnum of the 12 USDA textural classes, coarsest first; values as the book's tables spell them
-│   │   └── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27)
+│   │   ├── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27)
+│   │   └── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
@@ -68,7 +69,10 @@ TerraSim2/
 │       ├── write_model_inputs.py    # ModelInputs -> folder (manifest.json, .npy arrays, .csv series)
 │       ├── load_model_inputs.py     # folder -> ModelInputs; refuses other FORMAT_VERSIONs
 │       ├── lookup_campbell_params.py          # SoilTexture -> CampbellParams from the book's table 5.3
-│       └── compute_campbell_water_content.py  # (psi J/kg, CampbellParams) -> theta m3/m3; saturated at and above air entry
+│       ├── compute_campbell_water_content.py  # (psi J/kg, CampbellParams) -> theta m3/m3; saturated at and above air entry
+│       ├── lookup_van_genuchten_params.py     # SoilTexture -> VanGenuchtenParams from the book's table 5.4
+│       ├── compute_van_genuchten_water_content.py  # (psi J/kg, VanGenuchtenParams) -> theta m3/m3; saturated at and above zero
+│       └── compute_available_water.py         # (curve, params, root depth m) -> mm between field capacity -33 and wilting point -1500 J/kg
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
 │   ├── dense_sites.md     # the same table with caveats and provenance
