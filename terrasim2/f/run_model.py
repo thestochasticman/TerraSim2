@@ -109,7 +109,7 @@ def _inputs() -> ModelInputs:
 def _site_inputs(stub: str) -> ModelInputs:
     from terrasim2.f.load_model_inputs import load_model_inputs
 
-    return load_model_inputs(Path(__file__).resolve().parents[2] / "dev_data" / stub / "model_inputs")
+    return load_model_inputs(Path(__file__).resolve().parents[2] / "data" / "dev_sites" / stub / "model_inputs")
 
 
 def t1():

@@ -97,7 +97,7 @@ def t2():
         raise AssertionError("expected ValueError for version mismatch")
 
 
-DEV_DATA = Path(__file__).resolve().parents[2] / "dev_data"
+DEV_SITES = Path(__file__).resolve().parents[2] / "data" / "dev_sites"
 
 
 def t3():
@@ -106,7 +106,7 @@ def t3():
     from terrasim2.f.step_bucket_model import step_bucket_model
     from terrasim2.k.bucket_model_params import BucketModelParams
 
-    inputs = load_model_inputs(DEV_DATA / "example" / "model_inputs")
+    inputs = load_model_inputs(DEV_SITES / "example" / "model_inputs")
     assert inputs.n_days >= 28 and inputs.n_tiles >= 1
     assert 100 < inputs.grid.elevation.min() < inputs.grid.elevation.max() < 1500
     result = run_model(step_bucket_model, inputs, BucketModelParams())
@@ -115,7 +115,7 @@ def t3():
 
 def t4():
     """Every committed site folder loads, names itself correctly, and covers its dates without gaps."""
-    folders = sorted(p for p in DEV_DATA.glob("*/model_inputs") if p.parent.name != "example")
+    folders = sorted(p for p in DEV_SITES.glob("*/model_inputs") if p.parent.name != "example")
     assert len(folders) == 6, [p.parent.name for p in folders]
     for folder in folders:
         inputs = load_model_inputs(folder)
