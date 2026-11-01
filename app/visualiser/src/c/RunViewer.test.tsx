@@ -50,7 +50,17 @@ describe("RunViewer", () => {
     await waitFor(() => expect(select().disabled).toBe(false));
     fireEvent.change(select(), { target: { value: "tarrawarra" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ stub: "tarrawarra", writeEveryDays: 1 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ stub: "tarrawarra", writeEveryDays: 1, rootDepth: 0.3 })));
+  });
+
+  it("the root depth field goes into the request, and an empty one disables the run button", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText("root depth"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ rootDepth: 1 })));
+    fireEvent.change(screen.getByLabelText("root depth"), { target: { value: "" } });
+    expect((screen.getByRole("button", { name: "run" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("while running: follows the newest day, the scrubber is a locked progress bar", async () => {

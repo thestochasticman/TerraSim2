@@ -9,6 +9,7 @@ from app.api.f.compute_soil_column import compute_soil_column
 from app.api.f.compute_texture_triangle import compute_texture_triangle
 from app.api.f.find_inputs import DEV_SITES, find_inputs
 from app.api.f.launch_run import launch_run
+from app.api.f.read_inputs_key import read_inputs_key
 from app.api.f.read_moisture_day import read_moisture_day
 from app.api.f.read_run_status import read_run_status
 from app.api.f.read_series import read_series
@@ -23,10 +24,11 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     ------
     GET  /sites                       stubs with prepared inputs under ``inputs_roots``
     POST /runs                        body RunRequest -> {run_id, status}; starts the run
-                                      unless its store is already complete or in progress
+                                      unless its store is already complete or in progress;
+                                      the id covers the request and the inputs' write time
     GET  /runs/{run_id}               status (missing, running, complete, failed),
                                       days_written, n_days, rows, cols, dates, meta
-    GET  /runs/{run_id}/terrain       elevation and capacity for the run's site
+    GET  /runs/{run_id}/terrain       elevation and capacity for the run's site at its root depth
     GET  /runs/{run_id}/moisture/{t}  one day as little-endian float32 bytes; 409 until written
     GET  /runs/{run_id}/series        grid-mean daily series for the days written
     GET  /soils/retention             the book's retention curves and available water per texture
@@ -91,7 +93,7 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
             inputs = find_inputs(request.stub, inputs_roots)
         except FileNotFoundError as err:
             raise HTTPException(404, str(err)) from err
-        run_id = compute_run_id(request)
+        run_id = compute_run_id(request, read_inputs_key(inputs))
         if read_run_status(run_folder(run_id) / "store.zarr")["status"] == "complete":
             return {"run_id": run_id, "status": "complete"}
         worker = workers.get(run_id)
@@ -110,7 +112,7 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     @app.get("/runs/{run_id}/terrain")
     def terrain(run_id: str) -> dict:
         request = request_of(run_id)
-        return read_terrain(find_inputs(request.stub, inputs_roots))
+        return read_terrain(find_inputs(request.stub, inputs_roots), request.root_depth)
 
     @app.get("/runs/{run_id}/moisture/{t}")
     def moisture(run_id: str, t: int) -> Response:
@@ -176,5 +178,9 @@ def t():
     assert len(series["dates"]) == 31 and abs(series["moisture"][-1] - field.mean()) < 1e-3
 
     assert client.post("/runs", json=body).json() == {"run_id": run_id, "status": "complete"}
+    deep = client.post("/runs", json={**body, "root_depth": 1.0}).json()
+    assert deep["run_id"] != run_id and deep["status"] == "running"
+    deep_terrain = client.get(f"/runs/{deep['run_id']}/terrain").json()
+    assert np.mean(deep_terrain["capacity"]) > 2 * np.mean(terrain["capacity"])
     assert client.post("/runs", json={"stub": "nowhere"}).status_code == 404
     assert client.get("/runs/not-a-run").status_code == 404

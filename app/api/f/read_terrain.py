@@ -1,39 +1,46 @@
 import json
 from pathlib import Path
 
-import numpy as np
+from terrasim2.f.load_model_inputs import load_model_inputs
 
 
-def read_terrain(inputs_folder: Path) -> dict:
+def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
     """The terrain of a prepared inputs folder in the visualiser's JSON shape.
 
     Parameters
     ----------
     inputs_folder : Path
         A ``model_inputs`` folder.
+    root_depth : float, optional, m
+        When given and the inputs carry soil layers, the capacity is the
+        soil's available water down to this depth, as a run with this
+        root depth would use; otherwise the stored capacity.
 
     Returns
     -------
     dict
         ``rows``, ``cols``, ``cell_size`` (m), ``elevation`` (nested lists,
-        m) and ``capacity`` (nested lists, mm). The first four are the
-        format the visualiser's ``parseTerrainGrid`` already accepts.
+        m) and ``capacity`` (nested lists, mm; NaN as null). The first four
+        are the format the visualiser's ``parseTerrainGrid`` already accepts.
     """
-    inputs_folder = Path(inputs_folder)
-    manifest = json.loads((inputs_folder / "manifest.json").read_text())
-    elevation = np.load(inputs_folder / manifest["variables"]["elevation"]["file"])
-    capacity = np.load(inputs_folder / manifest["variables"]["capacity"]["file"])
+    inputs = load_model_inputs(inputs_folder)
+    capacity = inputs.grid.capacity
+    if root_depth is not None and inputs.soil is not None:
+        capacity = inputs.soil.compute_capacity(root_depth)
     return {
-        "rows": manifest["rows"],
-        "cols": manifest["cols"],
-        "cell_size": manifest["cell_size"],
-        "elevation": elevation.tolist(),
+        "rows": inputs.shape[0],
+        "cols": inputs.shape[1],
+        "cell_size": inputs.grid.cell_size,
+        "elevation": inputs.grid.elevation.tolist(),
         "capacity": capacity.tolist(),
     }
 
 
 def t():
-    """Shape and cell size match the manifest and the arrays are plain nested lists that serialise."""
+    """Shape and cell size match the manifest, the arrays are plain nested lists that serialise, and a
+    deeper root depth gives a larger capacity."""
+    import numpy as np
+
     from app.api.f.find_inputs import find_inputs
 
     terrain = read_terrain(find_inputs("tarrawarra"))
@@ -42,3 +49,7 @@ def t():
     assert len(terrain["capacity"]) == terrain["rows"]
     assert isinstance(terrain["elevation"][0][0], float)
     json.dumps(terrain)
+    shallow = np.array(read_terrain(find_inputs("tarrawarra"), root_depth=0.3)["capacity"])
+    deep = np.array(read_terrain(find_inputs("tarrawarra"), root_depth=1.0)["capacity"])
+    assert np.allclose(shallow, np.array(terrain["capacity"])), "the stored capacity is the 0.3 m one"
+    assert deep.mean() > 2 * shallow.mean()
