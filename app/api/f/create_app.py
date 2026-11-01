@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Response
 
 from app.api.f.compute_retention_curves import compute_retention_curves
 from app.api.f.compute_run_id import compute_run_id
+from app.api.f.compute_texture_triangle import compute_texture_triangle
 from app.api.f.find_inputs import DEV_SITES, find_inputs
 from app.api.f.launch_run import launch_run
 from app.api.f.read_moisture_day import read_moisture_day
@@ -28,6 +29,7 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     GET  /runs/{run_id}/moisture/{t}  one day as little-endian float32 bytes; 409 until written
     GET  /runs/{run_id}/series        grid-mean daily series for the days written
     GET  /soils/retention             the book's retention curves and available water per texture
+    GET  /soils/texture               the USDA texture triangle on a one-percent grid, classified
 
     Parameters
     ----------
@@ -69,6 +71,10 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     @app.get("/soils/retention")
     def retention() -> dict:
         return compute_retention_curves()
+
+    @app.get("/soils/texture")
+    def texture() -> dict:
+        return compute_texture_triangle()
 
     @app.post("/runs")
     def start(request: RunRequest) -> dict:
@@ -129,6 +135,8 @@ def t():
     assert "tarrawarra" in client.get("/sites").json()
     retention = client.get("/soils/retention").json()
     assert len(retention["models"]["campbell"]) == 12 and len(retention["models"]["campbell"][0]["theta"]) == len(retention["suction"])
+    triangle = client.get("/soils/texture").json()
+    assert len(triangle["points"]["texture"]) == 5151 and len(triangle["typical"]) == 12
 
     body = {"stub": "example", "write_every_days": 4}
     started = client.post("/runs", json=body).json()
