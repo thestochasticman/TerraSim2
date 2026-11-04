@@ -11,6 +11,7 @@ from terrasim2.k.model_inputs import ModelInputs
 from terrasim2.k.run_result import RunResult
 from terrasim2.k.run_store_params import RunStoreParams
 from terrasim2.k.step_function import StepFunction
+from terrasim2.k.terrain_derivatives import TerrainDerivatives
 
 
 def run_model(
@@ -19,13 +20,16 @@ def run_model(
     params: Any,
     folder: Path | None = None,
     store_params: RunStoreParams = RunStoreParams(),
+    flux_names: list[str] | None = None,
 ) -> RunResult:
     """Run a process step day by day over the whole series.
 
     Each day the rain and reference evapotranspiration fields are laid onto
-    the cells, the step is called with the grid's moisture and capacity, and
-    the moisture it returns is written back to the grid and recorded along
-    with the fluxes. The physics lives entirely in ``step``.
+    the cells, the step is called with the grid's moisture and capacity and
+    the terrain's derivatives, and the moisture it returns is written back
+    to the grid and recorded along with the fluxes. The physics lives
+    entirely in ``step``. The derivatives are one object for the whole run,
+    so whatever a step asks of the terrain is computed once.
 
     With no ``folder`` the histories are kept in memory. With one, they are
     written to a zarr store there in blocks of ``store_params.write_every_days``
@@ -45,6 +49,10 @@ def run_model(
     store_params : RunStoreParams
         Chunking, write frequency and whether fluxes are recorded.
         ``record_fluxes`` applies to in-memory runs too.
+    flux_names : list of str, optional
+        What each index of the step's flux axis is, written into the store
+        so readers need not know the step. Typically the lower-case names
+        of the step's flux IntEnum.
 
     Returns
     -------
@@ -52,13 +60,14 @@ def run_model(
         Dates, moisture at the end of every day, and every day's fluxes if recorded.
     """
     grid = inputs.grid
+    derivatives = TerrainDerivatives(grid)
     record_fluxes = store_params.record_fluxes
 
     if folder is None:
         moisture_history = np.empty((inputs.n_days, *grid.shape), dtype=np.float64)
         flux_history = None
         for t in range(inputs.n_days):
-            fluxes = _step_day(step, inputs, params, t)
+            fluxes = _step_day(step, inputs, derivatives, params, t)
             moisture_history[t] = grid.moisture
             if record_fluxes:
                 if flux_history is None:
@@ -71,13 +80,13 @@ def run_model(
     block_fluxes: list[np.ndarray] = []
     t0 = 0
     for t in range(inputs.n_days):
-        fluxes = _step_day(step, inputs, params, t)
+        fluxes = _step_day(step, inputs, derivatives, params, t)
         block_moisture.append(grid.moisture)
         if record_fluxes:
             block_fluxes.append(fluxes)
         if len(block_moisture) == store_params.write_every_days or t == inputs.n_days - 1:
             if group is None:
-                group = create_run_store(inputs, fluxes.shape[0], folder, store_params)
+                group = create_run_store(inputs, fluxes.shape[0], folder, store_params, flux_names)
             write_run_block(group, t0, np.stack(block_moisture), np.stack(block_fluxes) if record_fluxes else None)
             t0 = t + 1
             block_moisture, block_fluxes = [], []
@@ -85,11 +94,11 @@ def run_model(
     return load_run_result(folder)
 
 
-def _step_day(step: StepFunction, inputs: ModelInputs, params: Any, t: int) -> np.ndarray:
+def _step_day(step: StepFunction, inputs: ModelInputs, derivatives: TerrainDerivatives, params: Any, t: int) -> np.ndarray:
     """Advance the grid by day t and return that day's fluxes."""
     rain_today = get_values_on_cells(inputs.cell_map, inputs.rain, t)
     pet_today = get_values_on_cells(inputs.cell_map, inputs.pet, t)
-    inputs.grid.moisture, fluxes = step(inputs.grid.moisture, inputs.grid.capacity, rain_today, pet_today, params)
+    inputs.grid.moisture, fluxes = step(inputs.grid.moisture, inputs.grid.capacity, rain_today, pet_today, derivatives, params)
     return fluxes
 
 
@@ -128,16 +137,20 @@ def t1():
 
 
 def t2():
-    """The step is a parameter: a recording step sees one call per day with that day's rain, and its fluxes are kept per day."""
+    """The step is a parameter: a recording step sees one call per day with that day's rain and one derivatives
+    object throughout, and its fluxes are kept per day."""
     seen = []
+    derivatives_seen = set()
 
-    def recording_step(moisture, capacity, rain, pet, params):
+    def recording_step(moisture, capacity, rain, pet, terrain_derivatives, params):
         seen.append(rain.copy())
+        derivatives_seen.add(id(terrain_derivatives))
+        assert isinstance(terrain_derivatives, TerrainDerivatives)
         return moisture + rain, rain[np.newaxis]
 
     inputs = _inputs()
     result = run_model(recording_step, inputs, None)
-    assert len(seen) == 3 and result.n_fluxes == 1
+    assert len(seen) == 3 and result.n_fluxes == 1 and len(derivatives_seen) == 1
     assert np.array_equal(seen[1], [[0.0, 0.0, 30.0], [0.0, 30.0, 30.0]])
     assert np.array_equal(result.flux_history[1, 0], seen[1])
     assert np.array_equal(result.get_flux_total(0), sum(seen))
@@ -149,13 +162,17 @@ def t3():
     import tempfile
 
     from terrasim2.f.step_bucket_model import step_bucket_model
+    from terrasim2.k.bucket_flux import BucketFlux
     from terrasim2.k.bucket_model_params import BucketModelParams
 
     a, b = _site_inputs("tarrawarra"), _site_inputs("tarrawarra")
     in_memory = run_model(step_bucket_model, a, BucketModelParams())
     folder = Path(tempfile.mkdtemp()) / "tarrawarra.zarr"
-    on_disk = run_model(step_bucket_model, b, BucketModelParams(), folder=folder, store_params=RunStoreParams(chunk_days=50, write_every_days=37))
+    on_disk = run_model(step_bucket_model, b, BucketModelParams(), folder=folder, store_params=RunStoreParams(chunk_days=50, write_every_days=37), flux_names=[f.name.lower() for f in BucketFlux])
     assert on_disk.n_days == in_memory.n_days and on_disk.n_fluxes == 3
+    import zarr
+
+    assert zarr.open_group(folder, mode="r").attrs["flux_names"] == ["infiltration", "runoff", "evaporation"]
     assert np.array_equal(np.asarray(on_disk.moisture_history[:]), in_memory.moisture_history)
     assert np.array_equal(np.asarray(on_disk.flux_history[:]), in_memory.flux_history)
     reloaded = load_run_result(folder)

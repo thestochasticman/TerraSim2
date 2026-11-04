@@ -9,7 +9,7 @@ from terrasim2.k.run_store_params import RunStoreParams
 RUN_STORE_VERSION = 1
 
 
-def create_run_store(inputs: ModelInputs, n_fluxes: int, folder: Path, params: RunStoreParams) -> zarr.Group:
+def create_run_store(inputs: ModelInputs, n_fluxes: int, folder: Path, params: RunStoreParams, flux_names: list[str] | None = None) -> zarr.Group:
     """Create an empty zarr store for a run's histories.
 
     Layout of the group at ``folder``:
@@ -18,7 +18,8 @@ def create_run_store(inputs: ModelInputs, n_fluxes: int, folder: Path, params: R
         fluxes     float64 (T, n_fluxes, rows, cols), mm, same chunking with all fluxes
                    together; absent when ``params.record_fluxes`` is False
         attrs      version, dates (ISO strings), complete (False until the run
-                   finishes), units, store params as applied, and the inputs' meta
+                   finishes), units, flux_names (what each index of the flux
+                   axis is), store params as applied, and the inputs' meta
 
     Any existing store at ``folder`` is replaced.
 
@@ -30,6 +31,10 @@ def create_run_store(inputs: ModelInputs, n_fluxes: int, folder: Path, params: R
         Length of the flux axis the step produces. Ignored when fluxes are not recorded.
     folder : Path
     params : RunStoreParams
+    flux_names : list of str, optional
+        One name per flux index, lower case, for example the names of the
+        step's flux IntEnum. Recorded so a reader knows the axis without
+        knowing the step.
 
     Returns
     -------
@@ -51,6 +56,7 @@ def create_run_store(inputs: ModelInputs, n_fluxes: int, folder: Path, params: R
             "days_written": 0,
             "dates": [str(d) for d in inputs.dates],
             "units": "mm",
+            "flux_names": list(flux_names) if flux_names is not None else None,
             "store_params": {
                 "chunk_days": chunk_days,
                 "chunk_rows": chunk_rows,
@@ -75,7 +81,9 @@ def t1():
     assert g["moisture"].shape == (3, 2, 3) and g["moisture"].chunks == (2, 2, 2)
     assert g["fluxes"].shape == (3, 3, 2, 3) and g["fluxes"].chunks == (2, 3, 2, 2)
     assert g.attrs["complete"] is False and g.attrs["dates"] == ["2024-01-01", "2024-01-02", "2024-01-03"]
-    assert np.isnan(g["moisture"][0]).all()
+    assert np.isnan(g["moisture"][0]).all() and g.attrs["flux_names"] is None
+    named = create_run_store(_inputs(), 2, Path(tempfile.mkdtemp()) / "named.zarr", RunStoreParams(), flux_names=["a", "b"])
+    assert named.attrs["flux_names"] == ["a", "b"]
 
 
 def t2():

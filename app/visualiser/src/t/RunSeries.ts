@@ -4,6 +4,7 @@
  * dates : ISO date strings, one per written day
  * rain, pet, moisture : one value per date
  * infiltration, runoff, evaporation : one value per date, absent when the run did not record fluxes
+ * inflow : one value per date, water that arrived from upslope; present only for routed runs
  */
 export type RunSeries = {
   dates: string[];
@@ -13,4 +14,5 @@ export type RunSeries = {
   infiltration?: number[];
   runoff?: number[];
   evaporation?: number[];
+  inflow?: number[];
 };
