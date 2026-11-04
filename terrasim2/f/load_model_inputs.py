@@ -25,7 +25,9 @@ def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInp
     root_depth : float, optional, m
         When given and the inputs carry soil layers, the grid's capacity is
         recomputed for this root depth instead of taken from capacity.npy,
-        which holds the producer's choice. Refused for inputs without soil.
+        which holds the producer's choice; the result records it. Without
+        it, the manifest's root depth is recorded. Refused for inputs
+        without soil.
 
     Returns
     -------
@@ -54,7 +56,9 @@ def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInp
         if soil is None:
             raise ValueError(f"model inputs at {folder} carry no soil layers, so a root depth cannot be applied")
         grid.capacity = soil.compute_capacity(root_depth)
-    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil)
+    else:
+        root_depth = manifest.get("root_depth")
+    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil, root_depth=root_depth)
 
 
 def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayers | None:
@@ -62,7 +66,8 @@ def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayer
         return None
     names = entry["files"]
     soil_map = CellToTileMap(grid, np.load(folder / names["tile_index"]), n_tiles=entry["n_tiles"])
-    return SoilLayers(soil_map, entry["layer_bounds"], np.load(folder / names["fraction"]), np.load(folder / names["texture"]))
+    campbell = np.load(folder / names["campbell"]) if "campbell" in names else None
+    return SoilLayers(soil_map, entry["layer_bounds"], np.load(folder / names["fraction"]), np.load(folder / names["texture"]), campbell)
 
 
 def _read_series(path: Path, name: str, units: str) -> TileSeries:
@@ -95,7 +100,7 @@ def t1():
     assert np.array_equal(back.pet.values, original.pet.values)
     assert back.rain.units == "mm" and back.pet.name == "pet"
     assert back.meta == original.meta
-    assert back.soil is None
+    assert back.soil is None and back.root_depth is None
     try:
         load_model_inputs(folder, root_depth=0.5)
     except ValueError as err:
@@ -136,9 +141,12 @@ def t5():
     assert np.array_equal(back.soil.layer_bounds, original.soil.layer_bounds)
     assert np.allclose(back.soil.available_fraction, original.soil.available_fraction, equal_nan=True)
     assert np.array_equal(back.soil.texture_index, original.soil.texture_index)
+    assert np.allclose(back.soil.campbell, original.soil.campbell, equal_nan=True)
     assert np.all(back.grid.capacity == 80.0), "without a root depth the stored capacity stands"
+    assert back.root_depth == 0.3, "the manifest's root depth is recorded"
     shallow = load_model_inputs(folder, root_depth=0.3)
     assert np.allclose(shallow.grid.capacity, [[0.035 * 300] * 3, [0.116 * 300] * 3])
+    assert load_model_inputs(folder, root_depth=1.0).root_depth == 1.0
     assert np.isnan(load_model_inputs(folder, root_depth=1.0).grid.capacity[0, 0])
 
 
@@ -171,6 +179,9 @@ def t4():
         assert np.isfinite(inputs.grid.elevation).all(), f"{folder}: DEM has gaps"
         assert inputs.rain.values.shape == (inputs.n_days, inputs.n_tiles)
         assert inputs.soil is not None and inputs.soil.n_layers == 6, f"{folder}: expected six SLGA layers"
+        assert inputs.soil.campbell is not None and inputs.root_depth == inputs.meta["root_depth"]
+        hydraulics = inputs.soil.compute_hydraulics(inputs.root_depth)
+        assert hydraulics.has_conductivity and np.isfinite(hydraulics.k_sat).all(), f"{folder}: conductivity should be known everywhere"
         recomputed = inputs.soil.compute_capacity(inputs.meta["root_depth"])
         assert np.allclose(recomputed, inputs.grid.capacity, equal_nan=True), f"{folder}: capacity.npy disagrees with the soil layers"
         assert np.nanmin(inputs.grid.capacity) > 0, f"{folder}: capacity must be positive where known"
