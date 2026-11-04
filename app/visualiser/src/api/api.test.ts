@@ -4,6 +4,7 @@ import { fetchRetentionCurves } from "./fetchRetentionCurves";
 import { fetchRunSeries } from "./fetchRunSeries";
 import { fetchRunStatus } from "./fetchRunStatus";
 import { fetchSites } from "./fetchSites";
+import { fetchTextureTriangle } from "./fetchTextureTriangle";
 import { fetchTerrain } from "./fetchTerrain";
 import { startRun } from "./startRun";
 
@@ -58,6 +59,15 @@ describe("api wrappers", () => {
     expect(out.models.campbell[0].availableWater).toBe(36);
     fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
     await expect(fetchRetentionCurves()).rejects.toThrow("status 500");
+  });
+
+  it("fetchTextureTriangle calls /api/soils/texture and parses the columns", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ textures: ["sand"], step: 100, points: { sand: [100], silt: [0], clay: [0], texture: [0], diameter: [317], psi_e: [-0.4], b: [1] }, typical: [] }));
+    const out = await fetchTextureTriangle();
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/soils/texture");
+    expect(out.points.psiE).toEqual([-0.4]);
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 503));
+    await expect(fetchTextureTriangle()).rejects.toThrow("status 503");
   });
 
   it("fetchMoistureDay decodes the bytes and surfaces a 409 as an error", async () => {

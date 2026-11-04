@@ -1,0 +1,22 @@
+.viewer {
+  padding: 1rem 0 2rem;
+  font-family: system-ui, sans-serif;
+}
+
+.title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0 1rem;
+}
+
+.caption {
+  max-width: 70ch;
+  padding: 0.25rem 1rem 0.5rem;
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.message {
+  margin: 0;
+  padding: 1rem;
+}
