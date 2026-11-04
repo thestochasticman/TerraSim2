@@ -8,7 +8,9 @@ def compute_capacity_map(available_fraction: np.ndarray, layer_bounds: np.ndarra
 
     Each layer's available fraction times the part of the layer the roots
     reach, summed over layers. Roots deeper than the last bound see only
-    the soil that exists.
+    the soil that exists. A layer the roots do not reach contributes
+    nothing, even where its fraction is NaN; a NaN within reach makes the
+    cell NaN.
 
     Parameters
     ----------
@@ -24,7 +26,8 @@ def compute_capacity_map(available_fraction: np.ndarray, layer_bounds: np.ndarra
     Returns
     -------
     ndarray, mm
-        Shape ``(rows, cols)``, or a 0-d array for a single column.
+        Shape ``(rows, cols)``, or a 0-d array for a single column. NaN
+        where a layer within reach has no data.
     """
     fraction = np.asarray(available_fraction, dtype=np.float64)
     bounds = np.asarray(layer_bounds, dtype=np.float64)
@@ -38,7 +41,8 @@ def compute_capacity_map(available_fraction: np.ndarray, layer_bounds: np.ndarra
     thickness = compute_layer_thickness_in_depth(bounds, root_depth)
     if fraction.ndim == 3 and thickness.ndim == 1:
         thickness = thickness.reshape(-1, 1, 1)
-    return np.sum(fraction * thickness, axis=0) * 1000.0
+    contribution = np.where(thickness > 0, fraction * thickness, 0.0)
+    return np.sum(contribution, axis=0) * 1000.0
 
 
 BOUNDS = np.array([0.0, 0.05, 0.15, 0.30, 0.60, 1.0, 2.0])
@@ -52,6 +56,9 @@ def t1():
     sand_over_clay = np.array([0.035, 0.035, 0.035, 0.148, 0.148, 0.148])
     assert np.isclose(compute_capacity_map(sand_over_clay, BOUNDS, 0.3), 0.035 * 300)
     assert np.isclose(compute_capacity_map(sand_over_clay, BOUNDS, 0.6), 0.035 * 300 + 0.148 * 300)
+    gappy = np.array([0.035, 0.035, 0.035, np.nan, 0.148, 0.148])
+    assert np.isclose(compute_capacity_map(gappy, BOUNDS, 0.3), 0.035 * 300)
+    assert np.isnan(compute_capacity_map(gappy, BOUNDS, 0.6))
 
 
 def t2():

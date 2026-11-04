@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
+import { computeFiniteRange } from "@/f/computeFiniteRange";
 import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
 import { useRunSeries } from "@/h/useRunSeries";
+import type { ColourBy } from "@/t/ColourBy";
 import type { RunRequest } from "@/t/RunRequest";
 import styles from "./RunViewer.module.css";
 
@@ -35,6 +37,7 @@ export function RunViewer() {
   const { series, error: seriesError } = useRunSeries(status?.runId ?? null, status?.daysWritten ?? 0);
   const [scrubbed, setScrubbed] = useState<{ runId: string; t: number; moisture: Float32Array } | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
+  const [colourBy, setColourBy] = useState<ColourBy>("moisture");
   const error = runError ?? sitesError ?? seriesError ?? scrubError;
 
   useEffect(() => {
@@ -67,6 +70,7 @@ export function RunViewer() {
   const scrubbedHere = scrubbed !== null && scrubbed.runId === runId ? scrubbed : null;
   const shown = playback.day === null ? latest : scrubbedHere && scrubbedHere.t === playback.day ? scrubbedHere : scrubbedHere ?? latest;
   const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
+  const capacityRange = terrain?.capacity ? computeFiniteRange(terrain.capacity) : null;
 
   return (
     <div className={styles.viewer}>
@@ -86,6 +90,18 @@ export function RunViewer() {
         </button>
         <span role="status">{progress}</span>
         {error && <span role="alert">{error}</span>}
+        <label>
+          colour{" "}
+          <select value={colourBy} onChange={(e) => setColourBy(e.target.value as ColourBy)} aria-label="colour by">
+            <option value="moisture">moisture, fraction of capacity</option>
+            <option value="capacity">capacity, mm</option>
+          </select>
+        </label>
+        {colourBy === "capacity" && capacityRange && (
+          <span data-testid="capacity-legend">
+            capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
+          </span>
+        )}
       </div>
       {status && status.daysWritten > 0 && (
         <DayScrubber
@@ -99,7 +115,7 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );

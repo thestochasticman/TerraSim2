@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunState } from "@/h/useRun";
 import type { TerrainGrid } from "@/t/TerrainGrid";
@@ -16,8 +16,8 @@ vi.mock("@/c/SeriesChart", () => ({
   ),
 }));
 vi.mock("@/c/TerrainScene", () => ({
-  TerrainScene: ({ grid, moisture }: { grid: TerrainGrid; moisture?: Float32Array }) => (
-    <div data-testid="scene">{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
+  TerrainScene: ({ grid, moisture, colourBy }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string }) => (
+    <div data-testid="scene" data-colour-by={colourBy ?? "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
   ),
 }));
 
@@ -34,12 +34,12 @@ describe("RunViewer", () => {
     useRunSeries.mockReset().mockReturnValue({ series: null, error: null });
   });
 
-  const select = () => screen.getByRole("combobox") as HTMLSelectElement;
+  const select = () => screen.getByRole("combobox", { name: "site" }) as HTMLSelectElement;
 
   it("lists sites, defaults to the first, and shows no run and no scrubber until started", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["example", "tarrawarra"]);
+    expect(within(select()).getAllByRole("option").map((o) => o.textContent)).toEqual(["example", "tarrawarra"]);
     expect(screen.getByRole("status").textContent).toBe("no run");
     expect(screen.queryByRole("slider")).toBeNull();
     expect(useRun).toHaveBeenLastCalledWith(null);
@@ -144,5 +144,22 @@ describe("RunViewer", () => {
     useRun.mockReturnValue({ ...idle, error: "POST /api/runs failed with status 404" });
     render(<RunViewer />);
     expect(screen.getByRole("alert").textContent).toContain("404");
+  });
+
+  it("the colour select switches the scene to capacity and shows the capacity range", async () => {
+    const withCapacity: TerrainGrid = { ...terrain, capacity: Float64Array.from([12.4, 57.6]) };
+    useRun.mockReturnValue({
+      ...idle,
+      status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates },
+      terrain: withCapacity,
+      latest: { t: 4, moisture: Float32Array.from([1, 2]) },
+    });
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("moisture");
+    expect(screen.queryByTestId("capacity-legend")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "capacity" } });
+    expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("capacity");
+    expect(screen.getByTestId("capacity-legend").textContent).toBe("capacity 12 to 58 mm, light to dark");
   });
 });

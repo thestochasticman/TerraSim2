@@ -5,12 +5,15 @@ import { Canvas } from "@react-three/fiber";
 import { useMemo } from "react";
 import { TerrainSurface } from "@/c/TerrainSurface";
 import { frameTerrainCamera } from "@/f/frameTerrainCamera";
+import type { ColourBy } from "@/t/ColourBy";
 import type { TerrainGrid } from "@/t/TerrainGrid";
 
 export type TerrainSceneProps = {
   grid: TerrainGrid;
   /** One day's moisture per cell, mm. When given, the surface is coloured by fullness. */
   moisture?: Float32Array;
+  /** What the surface colour encodes; passed to TerrainSurface. */
+  colourBy?: ColourBy;
 };
 
 /**
@@ -19,7 +22,7 @@ export type TerrainSceneProps = {
  *
  * Needs a browser with WebGL. Load it only on the client.
  */
-export function TerrainScene({ grid, moisture }: TerrainSceneProps) {
+export function TerrainScene({ grid, moisture, colourBy }: TerrainSceneProps) {
   const frame = useMemo(() => frameTerrainCamera(grid), [grid]);
   const lightDistance = frame.far / 10;
 
@@ -27,7 +30,7 @@ export function TerrainScene({ grid, moisture }: TerrainSceneProps) {
     <Canvas camera={{ position: frame.position, near: frame.near, far: frame.far, fov: 50 }}>
       <ambientLight intensity={0.5} />
       <directionalLight position={[lightDistance, lightDistance, lightDistance / 2]} intensity={1.2} />
-      <TerrainSurface grid={grid} moisture={moisture} />
+      <TerrainSurface grid={grid} moisture={moisture} colourBy={colourBy} />
       <OrbitControls target={frame.target} />
     </Canvas>
   );

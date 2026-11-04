@@ -13,14 +13,19 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
 
     The layout needs only NumPy and the standard library to read back:
 
-        manifest.json   version, rows, cols, cell_size, n_tiles, dates,
-                        variables with units, written_at, meta
-        elevation.npy   float64 (rows, cols), m
-        capacity.npy    float64 (rows, cols), mm
-        tile_index.npy  int32 (rows, cols)
-        rain.csv        date, tile_0, tile_1, ...   mm
-        pet.csv         date, tile_0, tile_1, ...   mm
+        manifest.json       version, rows, cols, cell_size, n_tiles, dates,
+                            variables with units, soil (when present), written_at, meta
+        elevation.npy       float64 (rows, cols), m
+        capacity.npy        float64 (rows, cols), mm, for the producer's root depth
+        tile_index.npy      int32 (rows, cols)
+        rain.csv            date, tile_0, tile_1, ...   mm
+        pet.csv             date, tile_0, tile_1, ...   mm
+        soil_tile_index.npy int32 (rows, cols), which soil tile each cell reads
+        soil_fraction.npy   float64 (n_layers, n_soil_tiles), m3 m-3 available
+        soil_texture.npy    int8 (n_layers, n_soil_tiles), index into the manifest's textures
 
+    The three soil files exist only when the inputs carry soil layers; the
+    manifest's ``soil`` entry then names them with the layer bounds in m.
     Initial moisture is not written; a run sets it. Existing files in the
     folder are overwritten.
 
@@ -43,6 +48,20 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
     np.save(folder / "tile_index.npy", inputs.cell_map.tile_index.astype(np.int32))
     _write_series(inputs.rain, folder / "rain.csv")
     _write_series(inputs.pet, folder / "pet.csv")
+    soil = None
+    if inputs.soil is not None:
+        from terrasim2.k.soil_texture import SoilTexture
+
+        np.save(folder / "soil_tile_index.npy", inputs.soil.cell_map.tile_index.astype(np.int32))
+        np.save(folder / "soil_fraction.npy", inputs.soil.available_fraction.astype(np.float64))
+        np.save(folder / "soil_texture.npy", inputs.soil.texture_index.astype(np.int8))
+        soil = {
+            "layer_bounds": inputs.soil.layer_bounds.tolist(),
+            "n_tiles": inputs.soil.n_tiles,
+            "textures": [str(tex) for tex in SoilTexture],
+            "files": {"tile_index": "soil_tile_index.npy", "fraction": "soil_fraction.npy", "texture": "soil_texture.npy"},
+            "units": {"layer_bounds": "m", "fraction": "m3 m-3"},
+        }
 
     manifest = {
         "version": ModelInputs.FORMAT_VERSION,
@@ -59,6 +78,7 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
             "rain": {"file": "rain.csv", "units": inputs.rain.units},
             "pet": {"file": "pet.csv", "units": inputs.pet.units},
         },
+        "soil": soil,
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "meta": inputs.meta,
     }
@@ -74,8 +94,9 @@ def _write_series(series, path: Path) -> None:
             writer.writerow([str(date), *(repr(float(v)) for v in row)])
 
 
-def _inputs():
+def _inputs(with_soil: bool = False):
     from terrasim2.k.cell_to_tile_map import CellToTileMap
+    from terrasim2.k.soil_layers import SoilLayers
     from terrasim2.k.terrain_grid import TerrainGrid
     from terrasim2.k.tile_series import TileSeries
 
@@ -84,7 +105,11 @@ def _inputs():
     dates = ["2024-01-01", "2024-01-02"]
     rain = TileSeries("rain", "mm", dates, [[5.0, 20.25], [0.0, 1.5]])
     pet = TileSeries("pet", "mm", dates, [[3.0, 3.0], [4.0, 4.1]])
-    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]})
+    soil = None
+    if with_soil:
+        soil_map = CellToTileMap(grid, tile_index=[[0, 0, 0], [1, 1, 1]], n_tiles=2)
+        soil = SoilLayers(soil_map, [0.0, 0.1, 0.3, 1.0], [[0.035, 0.116], [0.035, 0.116], [np.nan, 0.116]], [[0, 4], [0, 4], [-1, 4]])
+    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]}, soil=soil)
 
 
 def t1():
@@ -105,7 +130,26 @@ def t1():
     rows = list(csv.reader(open(folder / "rain.csv")))
     assert rows[0] == ["date", "tile_0", "tile_1"]
     assert rows[1] == ["2024-01-01", "5.0", "20.25"]
+    assert manifest["soil"] is None and not (folder / "soil_fraction.npy").exists()
+
+
+def t2():
+    """With soil layers, the three soil files are written and the manifest names them with the bounds."""
+    import tempfile
+
+    folder = write_model_inputs(_inputs(with_soil=True), Path(tempfile.mkdtemp()) / "model_inputs")
+    manifest = json.loads((folder / "manifest.json").read_text())
+    soil = manifest["soil"]
+    assert soil["layer_bounds"] == [0.0, 0.1, 0.3, 1.0] and soil["n_tiles"] == 2 and soil["textures"][0] == "sand"
+    for name in soil["files"].values():
+        assert (folder / name).exists(), name
+    fraction = np.load(folder / "soil_fraction.npy")
+    assert fraction.shape == (3, 2) and fraction.dtype == np.float64 and np.isnan(fraction[2, 0])
+    texture = np.load(folder / "soil_texture.npy")
+    assert texture.dtype == np.int8 and texture[2, 0] == -1 and texture[1, 1] == 4
+    assert np.load(folder / "soil_tile_index.npy").dtype == np.int32
 
 
 def t():
     t1()
+    t2()
