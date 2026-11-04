@@ -52,7 +52,7 @@ TerraSim2/
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
-│   │   ├── step_function.py         # Protocol: (moisture, capacity, rain, pet, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
+│   │   ├── step_function.py         # Protocol: (moisture, capacity, rain, pet, terrain_derivatives, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
 │   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
 │   │   ├── model_inputs.py          # grid + cell_map + rain + pet + meta + optional soil, checked for consistency; FORMAT_VERSION
@@ -60,12 +60,12 @@ TerraSim2/
 │   │   ├── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27); floats, or arrays for one curve per cell
 │   │   ├── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
 │   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction and texture per layer; compute_capacity(root depth) -> mm per cell
-│   │   └── flow_network.py          # a terrain's drainage, built once: filled elevation, downstream cell (-1 at outlets), slope, visit order, upslope cell counts
+│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
-│       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; in memory, or blocks into a zarr store
+│       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one TerrainDerivatives per run; in memory, or blocks into a zarr store
 │       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
 │       ├── load_run_result.py       # open a store read-only as a RunResult; refuses incomplete runs unless asked
@@ -87,8 +87,7 @@ TerraSim2/
 │       ├── fill_pits.py                       # elevation -> elevation with depressions raised to their spill level plus a faint slope (priority flood)
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
-│       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
-│       └── build_flow_network.py              # TerrainGrid -> FlowNetwork: fill, direct, order, count
+│       └── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
 │   ├── dense_sites.md     # the same table with caveats and provenance
@@ -130,7 +129,7 @@ TerraSim2/
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
-    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts in the visualiser's JSON shape
+    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts (via TerrainDerivatives) in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
