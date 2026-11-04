@@ -59,7 +59,8 @@ TerraSim2/
 │   │   ├── soil_texture.py          # StrEnum of the 12 USDA textural classes, coarsest first; values as the book's tables spell them
 │   │   ├── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27); floats, or arrays for one curve per cell
 │   │   ├── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
-│   │   └── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction and texture per layer; compute_capacity(root depth) -> mm per cell
+│   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction and texture per layer; compute_capacity(root depth) -> mm per cell
+│   │   └── flow_network.py          # a terrain's drainage, built once: filled elevation, downstream cell (-1 at outlets), slope, visit order, upslope cell counts
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
@@ -82,7 +83,12 @@ TerraSim2/
 │       ├── compute_geometric_mean_diameter.py # (sand, silt, clay fractions) -> d_g in micrometres, book eq. 2.36
 │       ├── estimate_campbell_params.py        # (d_g, theta_s) -> CampbellParams by the book's regressions, eqs. 5.36 and 5.37; array-valued per cell
 │       ├── lookup_typical_fractions.py        # SoilTexture -> typical (sand, silt, clay) fractions from the book's table 2.4
-│       └── prepare_soil_layer.py              # (sand, silt, clay, bulk density kg/m3) -> (available fraction, texture index) by the book's continuous route; NaN-safe
+│       ├── prepare_soil_layer.py              # (sand, silt, clay, bulk density kg/m3) -> (available fraction, texture index) by the book's continuous route; NaN-safe
+│       ├── fill_pits.py                       # elevation -> elevation with depressions raised to their spill level plus a faint slope (priority flood)
+│       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
+│       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
+│       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       └── build_flow_network.py              # TerrainGrid -> FlowNetwork: fill, direct, order, count
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
 │   ├── dense_sites.md     # the same table with caveats and provenance
