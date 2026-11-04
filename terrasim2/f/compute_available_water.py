@@ -2,6 +2,8 @@ from collections.abc import Callable
 
 import numpy as np
 
+from terrasim2.f.compute_available_fraction import compute_available_fraction
+
 
 def compute_available_water(
     compute_water_content: Callable[[np.ndarray | float, object], np.ndarray],
@@ -12,8 +14,9 @@ def compute_available_water(
 ) -> np.ndarray:
     """Plant-available water of a soil column, as a depth of water.
 
-    Field capacity minus permanent wilting point, each read off the soil's
-    retention curve, times the depth of soil the roots reach. This is the
+    The available fraction (field capacity minus permanent wilting point,
+    each read off the soil's retention curve) times the depth of soil the
+    roots reach. This is the
     definition in exercise 5.6 of Bittelli, Campbell and Tomei (2015) and
     is the quantity ``TerrainGrid.capacity`` stands for.
 
@@ -40,14 +43,10 @@ def compute_available_water(
         Water the column can hold between wilting point and field
         capacity, same shape as ``root_depth``.
     """
-    if not psi_pwp < psi_fc:
-        raise ValueError(f"wilting point {psi_pwp} must be more negative than field capacity {psi_fc}")
     root_depth = np.asarray(root_depth, dtype=np.float64)
     if not np.all(root_depth > 0):
         raise ValueError("root_depth must be positive")
-    theta_fc = compute_water_content(psi_fc, params)
-    theta_pwp = compute_water_content(psi_pwp, params)
-    return (theta_fc - theta_pwp) * root_depth * 1000.0
+    return compute_available_fraction(compute_water_content, params, psi_fc, psi_pwp) * root_depth * 1000.0
 
 
 def t1():

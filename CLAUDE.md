@@ -22,7 +22,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 
 - A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going) and `complete`. `load_run_result` opens it read-only; `RunResult` never copies the arrays.
 - `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings) hashes to a run id; the same request is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
-- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
+- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified), `GET /soils/column` (one layered column's available water; query `textures`, `root_depth`, `model`). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
 
 ## Python structure
 
@@ -72,7 +72,10 @@ TerraSim2/
 │       ├── compute_campbell_water_content.py  # (psi J/kg, CampbellParams) -> theta m3/m3; saturated at and above air entry
 │       ├── lookup_van_genuchten_params.py     # SoilTexture -> VanGenuchtenParams from the book's table 5.4
 │       ├── compute_van_genuchten_water_content.py  # (psi J/kg, VanGenuchtenParams) -> theta m3/m3; saturated at and above zero
-│       ├── compute_available_water.py         # (curve, params, root depth m) -> mm between field capacity -33 and wilting point -1500 J/kg
+│       ├── compute_available_water.py         # (curve, params, root depth m) -> mm: the available fraction times the depth
+│       ├── compute_available_fraction.py      # (curve, params) -> theta at field capacity -33 minus theta at wilting point -1500 J/kg, m3/m3; arrays per cell
+│       ├── compute_layer_thickness_in_depth.py # (layer bounds m, depth m or field) -> how much of each layer lies above the depth, (L,) or (L, rows, cols)
+│       ├── compute_capacity_map.py            # (available fraction (L, rows, cols), layer bounds, root depth) -> mm per cell; the layered sum behind TerrainGrid.capacity
 │       ├── classify_soil_texture.py           # (sand, silt, clay fractions) -> index into list(SoilTexture) by the USDA triangle rules; partitions the triangle
 │       ├── compute_geometric_mean_diameter.py # (sand, silt, clay fractions) -> d_g in micrometres, book eq. 2.36
 │       ├── estimate_campbell_params.py        # (d_g, theta_s) -> CampbellParams by the book's regressions, eqs. 5.36 and 5.37; array-valued per cell
@@ -119,6 +122,7 @@ TerraSim2/
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
+    │       ├── compute_soil_column.py      # (6 textures, root depth, model) -> per-layer fraction, thickness in roots and mm on SLGA's depth intervals, plus the total
     │       ├── create_app.py       # FastAPI routes over the above; takes runs_root and inputs_roots
     │       └── serve.py            # `python -m app.api.f.serve [port]`: runs under {troi out_dir}/terrasim2_runs
     └── visualiser/        # Next.js + TypeScript; see App structure
@@ -129,12 +133,12 @@ TerraSim2/
         ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
         └── src/
             ├── api/                           # the only place fetch is called; one wrapper per route, tests in api.test.ts
-            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts, fetchRetentionCurves.ts, fetchTextureTriangle.ts
+            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts, fetchRetentionCurves.ts, fetchTextureTriangle.ts, fetchSoilColumn.ts
             ├── app/
             │   ├── layout.tsx                 # root html, fonts, metadata
             │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
             │   ├── runs/page.tsx              # renders <RunViewer />
-            │   ├── soils/page.tsx             # renders <RetentionViewer /> then <TextureTriangleViewer />
+            │   ├── soils/page.tsx             # renders <RetentionViewer />, <TextureTriangleViewer />, <SoilColumnViewer />
             │   └── globals.css
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
@@ -155,7 +159,11 @@ TerraSim2/
             │   ├── TextureTriangleViewer.tsx  # fetches the classified triangle via useTextureTriangle, caption, status/error, then TextureTriangle
             │   ├── TextureTriangleViewer.module.css
             │   ├── TextureTriangle.tsx        # the USDA triangle as a dot per grid composition coloured by class, class names at centroids, table 2.4 soils ringed; pointer reads the nearest composition; hovering a class dims the rest
-            │   └── TextureTriangle.module.css
+            │   ├── TextureTriangle.module.css
+            │   ├── SoilColumnViewer.tsx       # a texture picker per SLGA layer, a root depth slider and a model radio; fetches via useSoilColumn, then SoilColumnChart
+            │   ├── SoilColumnViewer.module.css
+            │   ├── SoilColumnChart.tsx        # depth down the page, a bar per layer as wide as its available fraction, solid within the roots and faded below; total mm as the headline, a table of layers
+            │   └── SoilColumnChart.module.css
             ├── f/                             # every .ts has a .test.ts beside it
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
@@ -174,6 +182,7 @@ TerraSim2/
             │   ├── parseTextureTriangle.ts    # service texture JSON -> TextureTriangle; columns must line up and classes must index the texture list
             │   ├── projectTernary.ts          # (sand, silt, clay) -> {x, y} in a unit triangle: sand at (0, 0), silt at (1, 0), clay at the apex
             │   ├── invertTernary.ts           # {x, y} -> fractions; negative outside the triangle
+            │   ├── parseSoilColumn.ts         # service column JSON -> SoilColumn; one layer per bound interval
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
@@ -182,7 +191,8 @@ TerraSim2/
             │   ├── useRunSeries.ts            # the run's grid-mean series, refetched as days are written
             │   ├── useRetentionCurves.ts      # fetch the book's curves once on mount
             │   ├── useColourScheme.ts         # "light" | "dark" from prefers-color-scheme, following changes; light on the server
-            │   └── useTextureTriangle.ts      # fetch the classified triangle once on mount
+            │   ├── useTextureTriangle.ts      # fetch the classified triangle once on mount
+            │   └── useSoilColumn.ts           # refetch a column as its textures, root depth or model change; keeps the last column on a failure
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
                 ├── TerrainMesh.ts
@@ -193,7 +203,8 @@ TerraSim2/
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                └── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
+                ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
+                └── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
 ```
 
 ### Tests

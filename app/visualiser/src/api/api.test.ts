@@ -4,6 +4,7 @@ import { fetchRetentionCurves } from "./fetchRetentionCurves";
 import { fetchRunSeries } from "./fetchRunSeries";
 import { fetchRunStatus } from "./fetchRunStatus";
 import { fetchSites } from "./fetchSites";
+import { fetchSoilColumn } from "./fetchSoilColumn";
 import { fetchTextureTriangle } from "./fetchTextureTriangle";
 import { fetchTerrain } from "./fetchTerrain";
 import { startRun } from "./startRun";
@@ -68,6 +69,15 @@ describe("api wrappers", () => {
     expect(out.points.psiE).toEqual([-0.4]);
     fetchMock.mockResolvedValueOnce(jsonResponse({}, 503));
     await expect(fetchTextureTriangle()).rejects.toThrow("status 503");
+  });
+
+  it("fetchSoilColumn puts the inputs in the query and parses the layers", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ textures: ["sand"], layer_bounds: [0, 1], root_depth: 0.5, model: "campbell", layers: [{ top: 0, bottom: 1, texture: "sand", fraction: 0.035, thickness_in_roots: 0.5, mm: 17.5 }], total: 17.5 }));
+    const out = await fetchSoilColumn(["sand"], 0.5, "campbell");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/soils/column?textures=sand&root_depth=0.5&model=campbell");
+    expect(out.layers[0].thicknessInRoots).toBe(0.5);
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 422));
+    await expect(fetchSoilColumn(["sand"], 0.5, "campbell")).rejects.toThrow("status 422");
   });
 
   it("fetchMoistureDay decodes the bytes and surfaces a 409 as an error", async () => {
