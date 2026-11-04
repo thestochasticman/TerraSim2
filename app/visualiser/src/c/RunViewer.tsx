@@ -72,6 +72,7 @@ export function RunViewer() {
   const shown = playback.day === null ? latest : scrubbedHere && scrubbedHere.t === playback.day ? scrubbedHere : scrubbedHere ?? latest;
   const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
   const capacityRange = terrain?.capacity ? computeFiniteRange(terrain.capacity) : null;
+  const upslopeRange = terrain?.upslopeCells ? computeFiniteRange(terrain.upslopeCells) : null;
 
   return (
     <div className={styles.viewer}>
@@ -100,11 +101,17 @@ export function RunViewer() {
           <select value={colourBy} onChange={(e) => setColourBy(e.target.value as ColourBy)} aria-label="colour by">
             <option value="moisture">moisture, fraction of capacity</option>
             <option value="capacity">capacity, mm</option>
+            <option value="upslope">drainage, cells upslope</option>
           </select>
         </label>
         {colourBy === "capacity" && capacityRange && (
           <span data-testid="capacity-legend">
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
+          </span>
+        )}
+        {colourBy === "upslope" && upslopeRange && (
+          <span data-testid="upslope-legend">
+            {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
           </span>
         )}
       </div>

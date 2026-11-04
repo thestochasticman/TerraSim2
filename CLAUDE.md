@@ -130,7 +130,7 @@ TerraSim2/
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
-    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation and capacity at that root depth in the visualiser's JSON shape
+    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
@@ -156,8 +156,8 @@ TerraSim2/
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity with colourBy="capacity", else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, root depth field, run button, status, colour-by select with a capacity legend; follows the newest day while running, scrubs when complete
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
+            │   ├── RunViewer.tsx              # site picker, root depth field, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
@@ -180,7 +180,7 @@ TerraSim2/
             │   ├── buildTerrainMesh.ts        # TerrainGrid -> vertex positions and triangle indices
             │   ├── createTerrainGeometry.ts   # TerrainGrid -> Three.js BufferGeometry with normals
             │   ├── frameTerrainCamera.ts      # TerrainGrid -> camera target, position, near, far
-            │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid (elevation, optional capacity)
+            │   ├── parseTerrainGrid.ts        # JSON -> TerrainGrid (elevation, optional capacity and upslope_cells)
             │   ├── parseRunStatus.ts          # service status JSON -> RunStatus
             │   ├── parseRunSeries.ts          # service series JSON -> RunSeries
             │   ├── decodeMoistureDay.ts       # float32 bytes -> Float32Array for one day
@@ -188,6 +188,7 @@ TerraSim2/
             │   ├── computeVertexColours.ts    # moisture + capacity -> RGB per vertex
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
             │   ├── computeCapacityColours.ts  # capacity per cell -> RGB per vertex on the ramp, scaled by the largest finite capacity; NaN -> grey
+            │   ├── computeUpslopeColours.ts   # upslope cell counts -> RGB per vertex on the ramp over log(count); ridges light, channels dark
             │   ├── computeFiniteRange.ts      # {min, max} of the finite values, or null
             │   ├── createUniformColours.ts    # one RGB repeated per vertex, the colour attribute's layout
             │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index, within an optional visible range
@@ -209,7 +210,7 @@ TerraSim2/
             │   ├── useTextureTriangle.ts      # fetch the classified triangle once on mount
             │   └── useSoilColumn.ts           # refetch a column as its textures, root depth or model change; keeps the last column on a failure
             └── t/
-                ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
+                ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, upslopeCells?
                 ├── TerrainMesh.ts
                 ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth
                 ├── RunStatus.ts
@@ -218,7 +219,7 @@ TerraSim2/
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                ├── ColourBy.ts                # "moisture" | "capacity": what the terrain surface's colour encodes
+                ├── ColourBy.ts                # "moisture" | "capacity" | "upslope": what the terrain surface's colour encodes
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
                 └── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
 ```

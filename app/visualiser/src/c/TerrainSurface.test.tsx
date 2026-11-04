@@ -97,6 +97,16 @@ describe("TerrainSurface", () => {
     await renderer.unmount();
   });
 
+  it("colours by upslope cells when asked: a ridge is lighter than the outlet", async () => {
+    const grid: TerrainGrid = { ...makeGrid(2, 2, 1, [0, 0, 0, 0], [50, 50, 50, 50]), upslopeCells: Float64Array.from([1, 1, 2, 4]) };
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={Float32Array.from([50, 50, 50, 50])} colourBy="upslope" />);
+    const mesh = renderer.scene.findByType("Mesh").instance as Mesh;
+    const colour = mesh.geometry.getAttribute("color");
+    expect(colour.getX(0)).toBeGreaterThan(colour.getX(2));
+    expect(colour.getX(2)).toBeGreaterThan(colour.getX(3));
+    await renderer.unmount();
+  });
+
   it("ignores moisture whose length does not match the grid instead of throwing", async () => {
     const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [100, 100, 100, 100]);
     const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={new Float32Array(9)} />);

@@ -172,4 +172,14 @@ describe("RunViewer", () => {
     expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("capacity");
     expect(screen.getByTestId("capacity-legend").textContent).toBe("capacity 12 to 58 mm, light to dark");
   });
+
+  it("the drainage option colours by upslope cells and shows their range", async () => {
+    const withUpslope: TerrainGrid = { ...terrain, upslopeCells: Float64Array.from([1, 2]) };
+    useRun.mockReturnValue({ ...idle, status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates }, terrain: withUpslope, latest: null });
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "upslope" } });
+    expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("upslope");
+    expect(screen.getByTestId("upslope-legend").textContent).toContain("1 to 2 cells drain through");
+  });
 });

@@ -1,2 +1,2 @@
-/** What the terrain surface's colour encodes: a day's fullness, or the cells' capacity. */
-export type ColourBy = "moisture" | "capacity";
+/** What the terrain surface's colour encodes: a day's fullness, the cells' capacity, or how many cells drain through each. */
+export type ColourBy = "moisture" | "capacity" | "upslope";

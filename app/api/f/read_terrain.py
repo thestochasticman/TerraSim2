@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from terrasim2.f.build_flow_network import build_flow_network
 from terrasim2.f.load_model_inputs import load_model_inputs
 
 
@@ -20,19 +21,22 @@ def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
     -------
     dict
         ``rows``, ``cols``, ``cell_size`` (m), ``elevation`` (nested lists,
-        m) and ``capacity`` (nested lists, mm; NaN as null). The first four
-        are the format the visualiser's ``parseTerrainGrid`` already accepts.
+        m), ``capacity`` (nested lists, mm; NaN as null) and
+        ``upslope_cells`` (nested lists, dimensionless: how many cells drain
+        through each, from the pit-filled elevation).
     """
     inputs = load_model_inputs(inputs_folder)
     capacity = inputs.grid.capacity
     if root_depth is not None and inputs.soil is not None:
         capacity = inputs.soil.compute_capacity(root_depth)
+    network = build_flow_network(inputs.grid)
     return {
         "rows": inputs.shape[0],
         "cols": inputs.shape[1],
         "cell_size": inputs.grid.cell_size,
         "elevation": inputs.grid.elevation.tolist(),
         "capacity": capacity.tolist(),
+        "upslope_cells": network.upslope_cells.tolist(),
     }
 
 
@@ -53,3 +57,6 @@ def t():
     deep = np.array(read_terrain(find_inputs("tarrawarra"), root_depth=1.0)["capacity"])
     assert np.allclose(shallow, np.array(terrain["capacity"])), "the stored capacity is the 0.3 m one"
     assert deep.mean() > 2 * shallow.mean()
+    upslope = np.array(terrain["upslope_cells"])
+    assert upslope.shape == shallow.shape and upslope.min() == 1 and upslope.max() > 0.1 * upslope.size
+    assert isinstance(terrain["upslope_cells"][0][0], int)
