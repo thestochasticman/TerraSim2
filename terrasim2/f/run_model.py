@@ -20,6 +20,7 @@ def run_model(
     params: Any,
     folder: Path | None = None,
     store_params: RunStoreParams = RunStoreParams(),
+    flux_names: list[str] | None = None,
 ) -> RunResult:
     """Run a process step day by day over the whole series.
 
@@ -48,6 +49,10 @@ def run_model(
     store_params : RunStoreParams
         Chunking, write frequency and whether fluxes are recorded.
         ``record_fluxes`` applies to in-memory runs too.
+    flux_names : list of str, optional
+        What each index of the step's flux axis is, written into the store
+        so readers need not know the step. Typically the lower-case names
+        of the step's flux IntEnum.
 
     Returns
     -------
@@ -81,7 +86,7 @@ def run_model(
             block_fluxes.append(fluxes)
         if len(block_moisture) == store_params.write_every_days or t == inputs.n_days - 1:
             if group is None:
-                group = create_run_store(inputs, fluxes.shape[0], folder, store_params)
+                group = create_run_store(inputs, fluxes.shape[0], folder, store_params, flux_names)
             write_run_block(group, t0, np.stack(block_moisture), np.stack(block_fluxes) if record_fluxes else None)
             t0 = t + 1
             block_moisture, block_fluxes = [], []
@@ -157,13 +162,17 @@ def t3():
     import tempfile
 
     from terrasim2.f.step_bucket_model import step_bucket_model
+    from terrasim2.k.bucket_flux import BucketFlux
     from terrasim2.k.bucket_model_params import BucketModelParams
 
     a, b = _site_inputs("tarrawarra"), _site_inputs("tarrawarra")
     in_memory = run_model(step_bucket_model, a, BucketModelParams())
     folder = Path(tempfile.mkdtemp()) / "tarrawarra.zarr"
-    on_disk = run_model(step_bucket_model, b, BucketModelParams(), folder=folder, store_params=RunStoreParams(chunk_days=50, write_every_days=37))
+    on_disk = run_model(step_bucket_model, b, BucketModelParams(), folder=folder, store_params=RunStoreParams(chunk_days=50, write_every_days=37), flux_names=[f.name.lower() for f in BucketFlux])
     assert on_disk.n_days == in_memory.n_days and on_disk.n_fluxes == 3
+    import zarr
+
+    assert zarr.open_group(folder, mode="r").attrs["flux_names"] == ["infiltration", "runoff", "evaporation"]
     assert np.array_equal(np.asarray(on_disk.moisture_history[:]), in_memory.moisture_history)
     assert np.array_equal(np.asarray(on_disk.flux_history[:]), in_memory.flux_history)
     reloaded = load_run_result(folder)

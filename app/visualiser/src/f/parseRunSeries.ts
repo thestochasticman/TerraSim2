@@ -1,7 +1,7 @@
 import type { RunSeries } from "@/t/RunSeries";
 
 const REQUIRED = ["rain", "pet", "moisture"] as const;
-const OPTIONAL = ["infiltration", "runoff", "evaporation"] as const;
+const OPTIONAL = ["infiltration", "runoff", "evaporation", "inflow"] as const;
 
 /**
  * Turn the service's series JSON into a RunSeries, checking every list has one value per date.

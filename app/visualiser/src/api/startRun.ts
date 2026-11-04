@@ -11,6 +11,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       stub: request.stub,
+      step: request.step,
       stress_exponent: request.stressExponent,
       initial_fullness: request.initialFullness,
       root_depth: request.rootDepth,

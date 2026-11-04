@@ -9,6 +9,11 @@ describe("computeChartExtent", () => {
     expect(e.maxOut).toBeCloseTo(33.6);
   });
 
+  it("stacks inflow on rain for the upward side", () => {
+    const e = computeChartExtent({ dates: ["a", "b"], rain: [10, 2], pet: [1, 1], moisture: [1, 1], inflow: [0, 12] });
+    expect(e.maxIn).toBeCloseTo(14.7);
+  });
+
   it("uses demand for the outward side when it exceeds the losses", () => {
     const e = computeChartExtent({ dates: ["a"], rain: [3], pet: [8], moisture: [50], evaporation: [2], runoff: [1] });
     expect(e.maxOut).toBeCloseTo(8.4);

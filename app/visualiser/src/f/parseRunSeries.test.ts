@@ -9,6 +9,8 @@ describe("parseRunSeries", () => {
   });
 
   it("allows the flux series to be absent", () => {
+    expect(parseRunSeries({ ...valid, inflow: [0, 1.5] }).inflow).toEqual([0, 1.5]);
+    expect(parseRunSeries(valid).inflow).toBeUndefined();
     const { infiltration: _a, runoff: _b, evaporation: _c, ...noFluxes } = valid;
     void _a; void _b; void _c;
     const s = parseRunSeries(noFluxes);

@@ -25,8 +25,9 @@ def read_series(inputs_folder: Path, store_folder: Path, block_days: int = 64) -
     dict
         ``dates`` (ISO strings) and, each a list of grid means in
         millimetres (mm) with one entry per written day: ``rain``, ``pet``,
-        ``moisture``, and if fluxes were stored ``infiltration``, ``runoff``,
-        ``evaporation``.
+        ``moisture``, and if fluxes were stored one list per flux under the
+        store's ``flux_names``; a store without names is read as the closed
+        bucket's ``infiltration``, ``runoff``, ``evaporation``.
     """
     inputs = load_model_inputs(inputs_folder)
     group = zarr.open_group(Path(store_folder), mode="r")
@@ -35,14 +36,15 @@ def read_series(inputs_folder: Path, store_folder: Path, block_days: int = 64) -
     rain = [float(get_values_on_cells(inputs.cell_map, inputs.rain, t).mean()) for t in range(written)]
     pet = [float(get_values_on_cells(inputs.cell_map, inputs.pet, t).mean()) for t in range(written)]
     moisture: list[float] = []
-    fluxes: dict[str, list[float]] = {f.name.lower(): [] for f in BucketFlux} if "fluxes" in group else {}
+    names = group.attrs.get("flux_names") or [f.name.lower() for f in BucketFlux]
+    fluxes: dict[str, list[float]] = {name: [] for name in names} if "fluxes" in group else {}
     for t0 in range(0, written, block_days):
         t1 = min(t0 + block_days, written)
         moisture.extend(np.asarray(group["moisture"][t0:t1]).mean(axis=(1, 2)).tolist())
         if fluxes:
             block = np.asarray(group["fluxes"][t0:t1]).mean(axis=(2, 3))
-            for f in BucketFlux:
-                fluxes[f.name.lower()].extend(block[:, f].tolist())
+            for k, name in enumerate(names):
+                fluxes[name].extend(block[:, k].tolist())
 
     return {"dates": [str(d) for d in inputs.dates[:written]], "rain": rain, "pet": pet, "moisture": moisture, **fluxes}
 
@@ -64,3 +66,10 @@ def t():
     for t in range(n):
         assert abs((s["moisture"][t] - prev) - (s["rain"][t] - s["runoff"][t] - s["evaporation"][t])) < 1e-9, t
         prev = s["moisture"][t]
+    routed = execute_run(RunRequest(stub="example", step="routed", write_every_days=31), inputs_folder, Path(tempfile.mkdtemp()) / "routed.zarr")
+    r = read_series(inputs_folder, routed)
+    assert "inflow" in r and len(r["inflow"]) == 31 and min(r["inflow"]) >= 0
+    prev = 0.5 * float(np.load(inputs_folder / "capacity.npy").mean())
+    for t in range(31):
+        assert abs((r["moisture"][t] - prev) - (r["infiltration"][t] + r["inflow"][t] - r["evaporation"][t])) < 1e-9, t
+        prev = r["moisture"][t]

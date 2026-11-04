@@ -31,6 +31,7 @@ export function RunViewer() {
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [stub, setStub] = useState<string>("");
   const [rootDepth, setRootDepth] = useState(0.3);
+  const [step, setStep] = useState<RunRequest["step"]>("bucket");
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
@@ -64,7 +65,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, stressExponent: 1, initialFullness: 0.5, rootDepth, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -85,6 +86,13 @@ export function RunViewer() {
                 {s}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          model{" "}
+          <select value={step} onChange={(e) => setStep(e.target.value as RunRequest["step"])} aria-label="model">
+            <option value="bucket">closed buckets</option>
+            <option value="routed">routed buckets, overflow runs downhill</option>
           </select>
         </label>
         <label>
