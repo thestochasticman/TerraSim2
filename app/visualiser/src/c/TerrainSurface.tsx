@@ -5,6 +5,7 @@ import { BufferAttribute, DoubleSide } from "three";
 import { computeCapacityColours } from "@/f/computeCapacityColours";
 import { computeVertexColours } from "@/f/computeVertexColours";
 import { createTerrainGeometry } from "@/f/createTerrainGeometry";
+import { createUniformColours } from "@/f/createUniformColours";
 import type { ColourBy } from "@/t/ColourBy";
 import type { TerrainGrid } from "@/t/TerrainGrid";
 
@@ -16,16 +17,27 @@ export type TerrainSurfaceProps = {
   colourBy?: ColourBy;
 };
 
+/** The surface's colour when there is nothing to colour by: an earth tone, RGB in 0..1. */
+export const EARTH_TONE: [number, number, number] = [0x8c / 255, 0x9a / 255, 0x62 / 255];
+
 /**
  * The terrain as a lit mesh. Must be rendered inside a react-three-fiber Canvas.
  *
- * Rebuilds its geometry when grid changes and disposes the old one. When
- * moisture is given, each vertex takes the sequential moisture colour for
- * its cell; with colourBy "capacity" and a grid that has capacity, the
- * capacity colour instead; otherwise the surface is a single earth tone.
+ * Rebuilds its geometry when grid changes and disposes the old one. The
+ * mesh always carries a colour per vertex, so the material never switches
+ * modes: when moisture is given, each vertex takes the sequential moisture
+ * colour for its cell; with colourBy "capacity" and a grid that has
+ * capacity, the capacity colour instead; otherwise the earth tone.
+ * Switching the material's vertex colours on after it has drawn would need
+ * a shader recompile that nothing triggers, and the surface would show its
+ * white base colour; a constant mode avoids that.
  */
 export function TerrainSurface({ grid, moisture, colourBy = "moisture" }: TerrainSurfaceProps) {
-  const geometry = useMemo(() => createTerrainGeometry(grid), [grid]);
+  const geometry = useMemo(() => {
+    const g = createTerrainGeometry(grid);
+    g.setAttribute("color", new BufferAttribute(createUniformColours(grid.rows * grid.cols, EARTH_TONE), 3));
+    return g;
+  }, [grid]);
 
   useEffect(() => {
     return () => geometry.dispose();
@@ -34,21 +46,17 @@ export function TerrainSurface({ grid, moisture, colourBy = "moisture" }: Terrai
   // Moisture from another grid (a stale day after a site switch) is ignored rather than drawn or thrown on.
   const byCapacity = colourBy === "capacity" && grid.capacity !== undefined;
   const byMoisture = !byCapacity && moisture !== undefined && moisture.length === grid.rows * grid.cols;
-  const coloured = byCapacity || byMoisture;
 
   useEffect(() => {
-    if (byCapacity && grid.capacity) {
-      geometry.setAttribute("color", new BufferAttribute(computeCapacityColours(grid.capacity), 3));
-    } else if (byMoisture && moisture) {
-      geometry.setAttribute("color", new BufferAttribute(computeVertexColours(moisture, grid.capacity), 3));
-    } else {
-      geometry.deleteAttribute("color");
-    }
+    const colours = byCapacity && grid.capacity ? computeCapacityColours(grid.capacity) : byMoisture && moisture ? computeVertexColours(moisture, grid.capacity) : createUniformColours(grid.rows * grid.cols, EARTH_TONE);
+    const attribute = geometry.getAttribute("color") as BufferAttribute;
+    (attribute.array as Float32Array).set(colours);
+    attribute.needsUpdate = true;
   }, [geometry, grid, moisture, byCapacity, byMoisture]);
 
   return (
     <mesh geometry={geometry}>
-      <meshStandardMaterial color={coloured ? "#ffffff" : "#8c9a62"} vertexColors={coloured} side={DoubleSide} />
+      <meshStandardMaterial color="#ffffff" vertexColors side={DoubleSide} />
     </mesh>
   );
 }

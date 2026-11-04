@@ -13,6 +13,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
       stub: request.stub,
       stress_exponent: request.stressExponent,
       initial_fullness: request.initialFullness,
+      root_depth: request.rootDepth,
       write_every_days: request.writeEveryDays,
       record_fluxes: request.recordFluxes,
     }),

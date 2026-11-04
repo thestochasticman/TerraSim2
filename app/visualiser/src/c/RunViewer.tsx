@@ -30,6 +30,7 @@ export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [stub, setStub] = useState<string>("");
+  const [rootDepth, setRootDepth] = useState(0.3);
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
@@ -63,7 +64,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, stressExponent: 1, initialFullness: 0.5, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, stressExponent: 1, initialFullness: 0.5, rootDepth, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -85,7 +86,11 @@ export function RunViewer() {
             ))}
           </select>
         </label>
-        <button type="button" onClick={start} disabled={!stub}>
+        <label>
+          root depth, m{" "}
+          <input type="number" min={0.05} max={2} step={0.05} value={rootDepth} onChange={(e) => setRootDepth(Number(e.target.value))} aria-label="root depth" className={styles.depth} />
+        </label>
+        <button type="button" onClick={start} disabled={!stub || !(rootDepth > 0)}>
           run
         </button>
         <span role="status">{progress}</span>

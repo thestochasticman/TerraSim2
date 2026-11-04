@@ -33,6 +33,8 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
         ``store_folder``.
     """
     inputs = load_model_inputs(inputs_folder)
+    if inputs.soil is not None:
+        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
     inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
     run_model(
         step_bucket_model,
@@ -62,7 +64,9 @@ def t():
     assert result.n_days == 31
     first = result.get_moisture(0)
     assert np.isfinite(first).all()
-    assert 0 < first.mean() < 40, "day 0 should sit near the 25 mm start, moved by one day of forcing"
+    assert 0 < first.mean() < 40, "day 0 should sit near a quarter of a 30 cm capacity, moved by one day of forcing"
+    deep = execute_run(RunRequest(stub="example", initial_fullness=0.25, root_depth=1.0, write_every_days=31), find_inputs("example"), Path(tempfile.mkdtemp()) / "deep.zarr")
+    assert load_run_result(deep).get_moisture(0).mean() > 2 * first.mean(), "deeper roots mean a larger capacity and a larger start"
 
 
 if __name__ == "__main__":

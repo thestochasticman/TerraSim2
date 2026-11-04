@@ -22,7 +22,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 ## Run outputs and the service
 
 - A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going) and `complete`. `load_run_result` opens it read-only; `RunResult` never copies the arrays.
-- `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings) hashes to a run id; the same request is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
+- `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings, including the root depth) and the inputs' write time hash to a run id; the same request on the same inputs is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
 - Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified), `GET /soils/column` (one layered column's available water; query `textures`, `root_depth`, `model`). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
 
 ## Python structure
@@ -115,15 +115,16 @@ TerraSim2/
 │       └── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, stress_exponent, initial_fullness, write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, stress_exponent, initial_fullness, root_depth, write_every_days, chunk_days, record_fluxes
     │   └── f/
-    │       ├── compute_run_id.py   # RunRequest -> "{stub}-{12 hex}"; same request, same id
+    │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
+    │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
     │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (data/dev_sites by default)
-    │       ├── execute_run.py      # the worker: inputs + request -> run_model into a store; also `python -m app.api.f.execute_run`
+    │       ├── execute_run.py      # the worker: inputs + request -> run_model into a store, capacity from the soil at the request's root depth; also `python -m app.api.f.execute_run`
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
-    │       ├── read_terrain.py     # model_inputs -> elevation and capacity in the visualiser's JSON shape
+    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation and capacity at that root depth in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
@@ -149,8 +150,8 @@ TerraSim2/
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex-coloured by moisture when given, or by capacity with colourBy="capacity"
-            │   ├── RunViewer.tsx              # site picker, run button, status, colour-by select with a capacity legend; follows the newest day while running, scrubs when complete
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity with colourBy="capacity", else an earth tone (switching the material mode after it has drawn leaves it white)
+            │   ├── RunViewer.tsx              # site picker, root depth field, run button, status, colour-by select with a capacity legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
@@ -182,6 +183,7 @@ TerraSim2/
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
             │   ├── computeCapacityColours.ts  # capacity per cell -> RGB per vertex on the ramp, scaled by the largest finite capacity; NaN -> grey
             │   ├── computeFiniteRange.ts      # {min, max} of the finite values, or null
+            │   ├── createUniformColours.ts    # one RGB repeated per vertex, the colour attribute's layout
             │   ├── pickDay.ts                 # x pixel within a plot -> nearest day index, within an optional visible range
             │   ├── clampDayRange.ts           # requested span -> valid visible range inside the run, at least a week wide
             │   ├── parseRetentionCurves.ts    # service retention JSON -> RetentionCurves; both models must list the same textures in order
@@ -203,7 +205,7 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth
                 ├── RunStatus.ts
                 ├── RunSeries.ts
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order
