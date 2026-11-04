@@ -28,6 +28,12 @@ describe("parseTerrainGrid", () => {
     expect(Array.from(grid.capacity ?? [])).toEqual([100, 100, 80, 100, 90, 100]);
   });
 
+  it("reads upslope cells when present, with the same layout", () => {
+    const grid = parseTerrainGrid({ ...valid, upslope_cells: [[1, 1, 1], [2, 3, 6]] });
+    expect(Array.from(grid.upslopeCells ?? [])).toEqual([1, 1, 1, 2, 3, 6]);
+    expect(() => parseTerrainGrid({ ...valid, upslope_cells: [[1, 1], [2, 3]] })).toThrow("upslope_cells row 0");
+  });
+
   it("accepts integer and fractional elevations alike", () => {
     const grid = parseTerrainGrid({ ...valid, elevation: [[1, 2.5, -3], [0, 0.001, 1e6]] });
     expect(Array.from(grid.elevation)).toEqual([1, 2.5, -3, 0, 0.001, 1e6]);

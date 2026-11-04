@@ -8,7 +8,7 @@ import { readPositiveInteger } from "./readPositiveInteger";
  *
  *     { "rows": 2, "cols": 3, "cell_size": 10.0, "elevation": [[...], [...]], "capacity": [[...], [...]] }
  *
- * `capacity` is optional; when present it must have the same shape as elevation.
+ * `capacity` and `upslope_cells` are optional; when present each must have the same shape as elevation.
  *
  * data : unknown
  *     The result of JSON.parse on a terrain file or the service's terrain response.
@@ -34,6 +34,9 @@ export function parseTerrainGrid(data: unknown): TerrainGrid {
   const grid: TerrainGrid = { rows, cols, cellSize, elevation };
   if (obj["capacity"] !== undefined) {
     grid.capacity = readField(obj, "capacity", rows, cols);
+  }
+  if (obj["upslope_cells"] !== undefined) {
+    grid.upslopeCells = readField(obj, "upslope_cells", rows, cols);
   }
   return grid;
 }

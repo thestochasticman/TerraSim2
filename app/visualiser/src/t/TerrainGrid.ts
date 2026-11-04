@@ -10,6 +10,8 @@
  * capacity : Float64Array of length rows * cols, millimetres (mm), optional
  *     Bucket capacity per cell, same layout. Present when the terrain came from
  *     prepared model inputs; absent for a bare terrain file.
+ * upslopeCells : Float64Array of length rows * cols, dimensionless, optional
+ *     How many cells drain through each cell, itself included; absent for a bare terrain file.
  */
 export type TerrainGrid = {
   rows: number;
@@ -17,4 +19,5 @@ export type TerrainGrid = {
   cellSize: number;
   elevation: Float64Array;
   capacity?: Float64Array;
+  upslopeCells?: Float64Array;
 };
