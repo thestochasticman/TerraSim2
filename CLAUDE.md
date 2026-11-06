@@ -53,6 +53,7 @@ TerraSim2/
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
 │   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
+│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, RUNOFF, EVAPORATION; the subsurface step's flux axis
 │   │   ├── step_function.py         # Protocol: (moisture, soil_hydraulics, rain, pet, terrain_derivatives, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
 │   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
@@ -68,6 +69,7 @@ TerraSim2/
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
 │       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill in flow order within the day; only outlets shed runoff
+│       ├── step_subsurface_bucket_model.py # routed buckets that also drain downslope through the soil by Darcy at the Campbell conductivity of their content; at field capacity that is tiny, the finding behind the free store
 │       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one SoilHydraulics and one TerrainDerivatives per run; in memory, or blocks into a zarr store with flux_names in its attrs
 │       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/flux_names/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
@@ -89,7 +91,7 @@ TerraSim2/
 │       ├── prepare_soil_layer.py              # (sand, silt, clay, bulk density kg/m3) -> (available fraction, texture index, Campbell theta_s/psi_e/b) by the book's continuous route; NaN-safe
 │       ├── estimate_saturated_conductivity.py # (theta_s, psi_e, b) -> K_s kg s m-3 by book eq. 6.34
 │       ├── lookup_saturated_conductivity.py   # SoilTexture -> K_s kg s m-3 from the book's table 6.1 (silt filled by eq. 6.34)
-│       ├── compute_campbell_conductivity.py   # (theta, CampbellParams, K_s) -> K kg s m-3 by book eq. 6.35: K_s (theta/theta_s)^(2b+3)
+│       ├── compute_campbell_conductivity.py   # (theta, theta_s, b, K_s) -> K kg s m-3 by book eq. 6.35: K_s (theta/theta_s)^(2b+3)
 │       ├── fill_pits.py                       # elevation -> elevation with depressions raised to their spill level plus a faint slope (priority flood)
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
