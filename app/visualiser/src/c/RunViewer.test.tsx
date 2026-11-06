@@ -61,6 +61,17 @@ describe("RunViewer", () => {
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "routed" })));
   });
 
+  it("the subsurface model shows its leak and rain-hours fields and sends them", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    expect(screen.queryByLabelText("leak fraction")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
+    fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6 })));
+  });
+
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));

@@ -6,24 +6,26 @@ class SubsurfaceBucketFlux(IntEnum):
 
     All in millimetres (mm) per cell per day.
 
-    INFILTRATION : the cell's own rain that entered its store
-    INFLOW : water that arrived from upslope, by overflow or by drainage, and entered the store
-    DRAINAGE : water that left the store downslope through the soil
+    INFILTRATION : the cell's own rain that entered its stores
+    INFLOW : water that arrived from upslope, over the surface or through the soil, and entered
+    DRAINAGE : free water that left downslope through the soil
+    LEAK : free water that left straight down, out of the root zone
     RUNOFF : water that left the grid at this cell; non-zero only at outlets
-    EVAPORATION : water that left the store to the air
+    EVAPORATION : water that left the stores to the air
     """
 
     INFILTRATION = 0
     INFLOW = 1
     DRAINAGE = 2
-    RUNOFF = 3
-    EVAPORATION = 4
+    LEAK = 3
+    RUNOFF = 4
+    EVAPORATION = 5
 
 
 def t():
-    """Five fluxes in declared order, usable directly as array indices."""
+    """Six fluxes in declared order, usable directly as array indices."""
     import numpy as np
 
-    assert [f.value for f in SubsurfaceBucketFlux] == [0, 1, 2, 3, 4]
-    assert SubsurfaceBucketFlux["DRAINAGE"] is SubsurfaceBucketFlux.DRAINAGE
-    assert np.arange(5 * 2 * 2).reshape(5, 2, 2)[SubsurfaceBucketFlux.RUNOFF][0, 0] == 12
+    assert [f.value for f in SubsurfaceBucketFlux] == [0, 1, 2, 3, 4, 5]
+    assert SubsurfaceBucketFlux["LEAK"] is SubsurfaceBucketFlux.LEAK
+    assert np.arange(6 * 2 * 2).reshape(6, 2, 2)[SubsurfaceBucketFlux.RUNOFF][0, 0] == 16

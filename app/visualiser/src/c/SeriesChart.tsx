@@ -21,6 +21,8 @@ export const SERIES_COLOURS = {
   evaporation: "#199e70",
   runoff: "#c98500",
   inflow: "#b5479b",
+  drainage: "#4f8fc6",
+  leak: "#8a8a8a",
 } as const;
 
 export type SeriesChartProps = {
@@ -42,7 +44,7 @@ const CLICK_TOLERANCE_DAYS = 2;
  * Two stacked panels sharing an x axis. Above, grid-mean stored water, a
  * level in mm, as a line. Below, the daily fluxes in mm per day as bars
  * from a zero line: rain upward with inflow from upslope stacked on it,
- * evaporation and runoff stacked downward,
+ * evaporation, runoff, drainage and leak stacked downward,
  * with demand outlined behind evaporation as the ceiling it could have
  * reached. A vertical marker shows the scrubber's day; hovering previews
  * a day in the legend; clicking seeks to it.
@@ -71,6 +73,8 @@ export function SeriesChart({ series, day, onSeek }: SeriesChartProps) {
   const losses: SeriesLine[] = [
     ...(series.evaporation ? [{ key: "evaporation", label: "evaporation", colour: SERIES_COLOURS.evaporation, values: series.evaporation }] : []),
     ...(series.runoff ? [{ key: "runoff", label: "runoff", colour: SERIES_COLOURS.runoff, values: series.runoff }] : []),
+    ...(series.drainage ? [{ key: "drainage", label: "drainage", colour: SERIES_COLOURS.drainage, values: series.drainage }] : []),
+    ...(series.leak ? [{ key: "leak", label: "leak", colour: SERIES_COLOURS.leak, values: series.leak }] : []),
   ];
   const fluxGroups: BarGroup[] = [
     { direction: "up", stack: gains },

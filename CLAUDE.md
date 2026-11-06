@@ -51,9 +51,10 @@ TerraSim2/
 │   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
+│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
 │   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
-│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, RUNOFF, EVAPORATION; the subsurface step's flux axis
+│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION; the subsurface step's flux axis
 │   │   ├── step_function.py         # Protocol: (moisture, soil_hydraulics, rain, pet, terrain_derivatives, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
 │   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
@@ -62,14 +63,14 @@ TerraSim2/
 │   │   ├── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27); floats, or arrays for one curve per cell
 │   │   ├── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
 │   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction, texture and Campbell curve per layer; compute_capacity(root depth) -> mm per cell, compute_hydraulics(root depth) -> SoilHydraulics
-│   │   ├── soil_hydraulics.py       # each cell's soil over the root depth as arrays: capacity always; k_sat, b, theta_s, theta_fc, theta_wp when a curve is known; require_conductivity()
+│   │   ├── soil_hydraulics.py       # each cell's soil over the root depth as arrays: capacity always; k_sat, b, theta_s, theta_fc, theta_wp when a curve is known; require_conductivity(); free_capacity = (theta_s - theta_fc) x root depth, mm
 │   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
 │       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill in flow order within the day; only outlets shed runoff
-│       ├── step_subsurface_bucket_model.py # routed buckets that also drain downslope through the soil by Darcy at the Campbell conductivity of their content; at field capacity that is tiny, the finding behind the free store
+│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and leaks down by leak_fraction; rain infiltrates up to K_s g rain_hours; overflow and drainage cascade in flow order
 │       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one SoilHydraulics and one TerrainDerivatives per run; in memory, or blocks into a zarr store with flux_names in its attrs
 │       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/flux_names/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
@@ -128,7 +129,7 @@ TerraSim2/
 │       └── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed), stress_exponent, initial_fullness, root_depth, write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
@@ -164,11 +165,11 @@ TerraSim2/
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
             │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth field, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
+            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
-            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
+            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff + drainage + leak stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
             │   ├── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
             │   ├── RetentionViewer.tsx        # fetches the book's curves via useRetentionCurves, caption, status/error, then RetentionChart
@@ -219,9 +220,9 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, upslopeCells?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, leakFraction, rainHours
                 ├── RunStatus.ts
-                ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow
+                ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, drainage, leak
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists

@@ -71,6 +71,16 @@ class SoilHydraulics:
     def has_conductivity(self) -> bool:
         return self.k_sat is not None
 
+    @property
+    def free_capacity(self) -> np.ndarray:
+        """Pore space above field capacity per cell, mm: what can hold free, drainable water.
+
+        ``(theta_s - theta_fc) * root_depth``, so it needs the conductivity
+        fields and the root depth.
+        """
+        self.require_conductivity("free_capacity")
+        return (self.theta_s - self.theta_fc) * self.root_depth * 1000.0
+
     def require_conductivity(self, step_name: str) -> None:
         """Raise a clear error when a step needs the conductivity fields and they are absent."""
         if not self.has_conductivity or self.root_depth is None:
@@ -90,6 +100,13 @@ def t1():
     full = SoilHydraulics(np.full((2, 3), 40.0), 0.3, np.full((2, 3), 1e-3), np.full((2, 3), 3.0), np.full((2, 3), 0.45), np.full((2, 3), 0.25), np.full((2, 3), 0.1))
     assert full.has_conductivity and full.root_depth == 0.3
     full.require_conductivity("step_x")
+    assert np.allclose(full.free_capacity, (0.45 - 0.25) * 0.3 * 1000)
+    try:
+        h.free_capacity
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for free_capacity without a curve")
 
 
 def t2():
