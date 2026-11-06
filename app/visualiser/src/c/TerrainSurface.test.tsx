@@ -97,6 +97,18 @@ describe("TerrainSurface", () => {
     await renderer.unmount();
   });
 
+  it("the relative mode stretches a day's small spread over the whole ramp", async () => {
+    const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [100, 100, 100, 100]);
+    const moisture = Float32Array.from([50, 50.5, 51, 52]);
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={moisture} colourBy="relative" />);
+    const colour = (renderer.scene.findByType("Mesh").instance as Mesh).geometry.getAttribute("color");
+    expect(colour.getX(0)).toBeGreaterThan(colour.getX(3) + 0.5);
+    await renderer.update(<TerrainSurface grid={grid} moisture={moisture} colourBy="moisture" />);
+    const absolute = (renderer.scene.findByType("Mesh").instance as Mesh).geometry.getAttribute("color");
+    expect(Math.abs(absolute.getX(0) - absolute.getX(3))).toBeLessThan(0.05);
+    await renderer.unmount();
+  });
+
   it("colours by upslope cells when asked: a ridge is lighter than the outlet", async () => {
     const grid: TerrainGrid = { ...makeGrid(2, 2, 1, [0, 0, 0, 0], [50, 50, 50, 50]), upslopeCells: Float64Array.from([1, 1, 2, 4]) };
     const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={Float32Array.from([50, 50, 50, 50])} colourBy="upslope" />);

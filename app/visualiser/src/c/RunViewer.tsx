@@ -123,6 +123,7 @@ export function RunViewer() {
           colour{" "}
           <select value={colourBy} onChange={(e) => setColourBy(e.target.value as ColourBy)} aria-label="colour by">
             <option value="moisture">moisture, fraction of capacity</option>
+            <option value="relative">moisture, stretched over the day</option>
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
           </select>
@@ -132,6 +133,11 @@ export function RunViewer() {
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
           </span>
         )}
+        {colourBy === "relative" && shown && (() => { const r = computeFiniteRange(shown.moisture); return r ? (
+          <span data-testid="relative-legend">
+            {r.min.toFixed(1)} to {r.max.toFixed(1)} mm this day, light to dark
+          </span>
+        ) : null; })()}
         {colourBy === "upslope" && upslopeRange && (
           <span data-testid="upslope-legend">
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale

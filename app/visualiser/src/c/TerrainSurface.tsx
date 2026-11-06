@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { BufferAttribute, DoubleSide } from "three";
 import { computeCapacityColours } from "@/f/computeCapacityColours";
+import { computeRelativeMoistureColours } from "@/f/computeRelativeMoistureColours";
 import { computeUpslopeColours } from "@/f/computeUpslopeColours";
 import { computeVertexColours } from "@/f/computeVertexColours";
 import { createTerrainGeometry } from "@/f/createTerrainGeometry";
@@ -14,7 +15,7 @@ export type TerrainSurfaceProps = {
   grid: TerrainGrid;
   /** One day's moisture per cell, mm. When given, the surface is coloured by fullness. */
   moisture?: Float32Array;
-  /** "capacity" colours by the grid's capacity, "upslope" by its upslope cell counts, when the grid has them. Default "moisture". */
+  /** "relative" stretches the day's moisture over its own range; "capacity" and "upslope" colour by the grid's fields when it has them. Default "moisture". */
   colourBy?: ColourBy;
 };
 
@@ -48,14 +49,15 @@ export function TerrainSurface({ grid, moisture, colourBy = "moisture" }: Terrai
   const byCapacity = colourBy === "capacity" && grid.capacity !== undefined;
   const byUpslope = colourBy === "upslope" && grid.upslopeCells !== undefined;
   const byMoisture = !byCapacity && !byUpslope && moisture !== undefined && moisture.length === grid.rows * grid.cols;
+  const relative = colourBy === "relative";
 
   useEffect(() => {
     const colours =
-      byCapacity && grid.capacity ? computeCapacityColours(grid.capacity) : byUpslope && grid.upslopeCells ? computeUpslopeColours(grid.upslopeCells) : byMoisture && moisture ? computeVertexColours(moisture, grid.capacity) : createUniformColours(grid.rows * grid.cols, EARTH_TONE);
+      byCapacity && grid.capacity ? computeCapacityColours(grid.capacity) : byUpslope && grid.upslopeCells ? computeUpslopeColours(grid.upslopeCells) : byMoisture && moisture ? (relative ? computeRelativeMoistureColours(moisture) : computeVertexColours(moisture, grid.capacity)) : createUniformColours(grid.rows * grid.cols, EARTH_TONE);
     const attribute = geometry.getAttribute("color") as BufferAttribute;
     (attribute.array as Float32Array).set(colours);
     attribute.needsUpdate = true;
-  }, [geometry, grid, moisture, byCapacity, byUpslope, byMoisture]);
+  }, [geometry, grid, moisture, byCapacity, byUpslope, byMoisture, relative]);
 
   return (
     <mesh geometry={geometry}>

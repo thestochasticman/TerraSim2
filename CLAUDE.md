@@ -164,8 +164,8 @@ TerraSim2/
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
+            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
@@ -196,6 +196,7 @@ TerraSim2/
             │   ├── computeVertexColours.ts    # moisture + capacity -> RGB per vertex
             │   ├── computeChartExtent.ts      # RunSeries -> y-axis tops for the moisture and flux panels
             │   ├── computeCapacityColours.ts  # capacity per cell -> RGB per vertex on the ramp, scaled by the largest finite capacity; NaN -> grey
+            │   ├── computeRelativeMoistureColours.ts # one day's moisture stretched over its own range -> RGB per vertex, so a small spatial spread still shows
             │   ├── computeUpslopeColours.ts   # upslope cell counts -> RGB per vertex on the ramp over log(count); ridges light, channels dark
             │   ├── computeFiniteRange.ts      # {min, max} of the finite values, or null
             │   ├── createUniformColours.ts    # one RGB repeated per vertex, the colour attribute's layout
@@ -227,7 +228,7 @@ TerraSim2/
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                ├── ColourBy.ts                # "moisture" | "capacity" | "upslope": what the terrain surface's colour encodes
+                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope": what the terrain surface's colour encodes
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
                 └── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
 ```

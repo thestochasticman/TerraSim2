@@ -192,6 +192,15 @@ describe("RunViewer", () => {
     expect(screen.getByTestId("capacity-legend").textContent).toBe("capacity 12 to 58 mm, light to dark");
   });
 
+  it("the relative option passes through and shows the day's range", async () => {
+    useRun.mockReturnValue({ ...idle, status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates }, terrain, latest: { t: 4, moisture: Float32Array.from([10.25, 12.75]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "relative" } });
+    expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("relative");
+    expect(screen.getByTestId("relative-legend").textContent).toBe("10.3 to 12.8 mm this day, light to dark");
+  });
+
   it("the drainage option colours by upslope cells and shows their range", async () => {
     const withUpslope: TerrainGrid = { ...terrain, upslopeCells: Float64Array.from([1, 2]) };
     useRun.mockReturnValue({ ...idle, status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates }, terrain: withUpslope, latest: null });
