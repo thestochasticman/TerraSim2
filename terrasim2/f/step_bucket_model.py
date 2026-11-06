@@ -2,17 +2,21 @@ import numpy as np
 
 from terrasim2.k.bucket_flux import BucketFlux
 from terrasim2.k.bucket_model_params import BucketModelParams
+from terrasim2.k.soil_hydraulics import SoilHydraulics
+from terrasim2.k.terrain_derivatives import TerrainDerivatives
+
 
 def step_bucket_model(
     moisture: np.ndarray,
-    capacity: np.ndarray,
+    soil_hydraulics: SoilHydraulics,
     rain: np.ndarray,
     pet: np.ndarray,
+    terrain_derivatives: TerrainDerivatives,
     params: BucketModelParams,
 ) -> tuple[np.ndarray, np.ndarray]:
     """One day of the bucket model on every cell, independently.
 
-    Each cell is a closed store of size ``capacity``. In order:
+    Each cell is a closed store of size ``soil_hydraulics.capacity``. In order:
 
     1. Rain fills the room left in the store. What does not fit is runoff.
     2. Evaporation takes ``pet * (fullness ** stress_exponent)`` where
@@ -21,19 +25,22 @@ def step_bucket_model(
     3. New moisture is old plus infiltration minus evaporation.
 
     So ``new - old == rain - runoff - evaporation`` exactly. No drainage,
-    no lateral flow; terrain plays no part.
+    no lateral flow; terrain plays no part, and ``terrain_derivatives`` is
+    taken only to meet the step signature.
 
     Parameters
     ----------
     moisture : ndarray (rows, cols), millimetres (mm)
         Store contents at the start of the day. Must lie in [0, capacity].
-    capacity : ndarray (rows, cols), millimetres (mm)
-        Store size per cell, non-negative. A zero-capacity cell passes all
-        rain to runoff and never evaporates.
+    soil_hydraulics : SoilHydraulics
+        Only ``capacity`` (mm) is read: store size per cell, non-negative.
+        A zero-capacity cell passes all rain to runoff and never evaporates.
     rain : ndarray (rows, cols), millimetres (mm)
         Rain arriving during the day, non-negative.
     pet : ndarray (rows, cols), millimetres (mm)
         Reference evapotranspiration demand for the day, non-negative.
+    terrain_derivatives : TerrainDerivatives
+        Not read.
     params : BucketModelParams
 
     Returns
@@ -43,6 +50,7 @@ def step_bucket_model(
     fluxes : ndarray (3, rows, cols), mm
         Indexed by ``BucketFlux``: INFILTRATION, RUNOFF, EVAPORATION.
     """
+    capacity = soil_hydraulics.capacity
     room = capacity - moisture
     infiltration = np.minimum(rain, room)
     runoff = rain - infiltration
@@ -60,11 +68,17 @@ def step_bucket_model(
     return new_moisture, fluxes
 
 
+def _derivatives(shape=(1, 1)) -> TerrainDerivatives:
+    from terrasim2.k.terrain_grid import TerrainGrid
+
+    return TerrainDerivatives(TerrainGrid(elevation=np.zeros(shape), cell_size=10.0))
+
+
 def _cell(moisture, capacity, rain, pet, exponent=1.0):
     """Run one cell as a 1x1 grid and return (new_moisture, infiltration, runoff, evaporation) as floats."""
     m, f = step_bucket_model(
-        np.array([[moisture]]), np.array([[capacity]]), np.array([[rain]]), np.array([[pet]]),
-        BucketModelParams(stress_exponent=exponent),
+        np.array([[moisture]]), SoilHydraulics(np.array([[capacity]])), np.array([[rain]]), np.array([[pet]]),
+        _derivatives(), BucketModelParams(stress_exponent=exponent),
     )
     return float(m[0, 0]), float(f[BucketFlux.INFILTRATION, 0, 0]), float(f[BucketFlux.RUNOFF, 0, 0]), float(f[BucketFlux.EVAPORATION, 0, 0])
 
@@ -117,7 +131,9 @@ def t6():
     moisture = rng.uniform(0, 1, (40, 50)) * capacity
     rain = rng.exponential(5, (40, 50)) * (rng.random((40, 50)) < 0.3)
     pet = rng.uniform(0, 8, (40, 50))
-    new, f = step_bucket_model(moisture, capacity, rain, pet, BucketModelParams())
+    derivatives = _derivatives((40, 50))
+    new, f = step_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, derivatives, BucketModelParams())
+    assert "filled" not in derivatives.__dict__, "the closed bucket must not touch the terrain"
     assert f.shape == (3, 40, 50)
     balance = (new - moisture) - (rain - f[BucketFlux.RUNOFF] - f[BucketFlux.EVAPORATION])
     assert np.abs(balance).max() < 1e-9

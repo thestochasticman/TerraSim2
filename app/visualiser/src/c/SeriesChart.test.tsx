@@ -47,6 +47,18 @@ describe("SeriesChart", () => {
     expect(outlines[0].getAttribute("fill")).toBe("none");
   });
 
+  it("stacks drainage and leak with the losses when the run has them", () => {
+    const { container } = render(<SeriesChart series={{ ...series, drainage: [0, 1, 1, 1, 0], leak: [0, 0, 1, 0, 0] }} day={1} />);
+    expect(container.querySelectorAll('rect[data-series="drainage"]')).toHaveLength(5);
+    expect(container.querySelectorAll('rect[data-series="leak"]')).toHaveLength(5);
+  });
+
+  it("stacks inflow on rain when the run has it", () => {
+    const { container } = render(<SeriesChart series={{ ...series, inflow: [0, 3, 0, 0, 1] }} day={1} />);
+    expect(container.querySelectorAll('rect[data-series="inflow"]')).toHaveLength(5);
+    expect(screen.getByRole("list", { name: "legend" }).textContent).toContain("inflow");
+  });
+
   it("has a legend naming every series and showing the marked day's values", () => {
     render(<SeriesChart series={series} day={1} />);
     const legend = screen.getByRole("list", { name: "legend" });

@@ -180,6 +180,11 @@ def t():
     assert client.post("/runs", json=body).json() == {"run_id": run_id, "status": "complete"}
     deep = client.post("/runs", json={**body, "root_depth": 1.0}).json()
     assert deep["run_id"] != run_id and deep["status"] == "running"
+    routed = client.post("/runs", json={**body, "step": "routed"}).json()
+    assert routed["run_id"] not in (run_id, deep["run_id"]) and routed["status"] == "running"
+    assert client.post("/runs", json={**body, "step": "darcy"}).status_code == 422
+    sub = client.post("/runs", json={**body, "step": "subsurface", "rain_hours": 6}).json()
+    assert sub["status"] == "running" and sub["run_id"] not in (run_id, deep["run_id"], routed["run_id"])
     deep_terrain = client.get(f"/runs/{deep['run_id']}/terrain").json()
     assert np.mean(deep_terrain["capacity"]) > 2 * np.mean(terrain["capacity"])
     assert client.post("/runs", json={"stub": "nowhere"}).status_code == 404

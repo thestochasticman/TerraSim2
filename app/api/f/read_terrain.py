@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from terrasim2.f.build_flow_network import build_flow_network
 from terrasim2.f.load_model_inputs import load_model_inputs
+from terrasim2.k.terrain_derivatives import TerrainDerivatives
 
 
 def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
@@ -29,14 +29,14 @@ def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
     capacity = inputs.grid.capacity
     if root_depth is not None and inputs.soil is not None:
         capacity = inputs.soil.compute_capacity(root_depth)
-    network = build_flow_network(inputs.grid)
+    derivatives = TerrainDerivatives(inputs.grid)
     return {
         "rows": inputs.shape[0],
         "cols": inputs.shape[1],
         "cell_size": inputs.grid.cell_size,
         "elevation": inputs.grid.elevation.tolist(),
         "capacity": capacity.tolist(),
-        "upslope_cells": network.upslope_cells.tolist(),
+        "upslope_cells": derivatives.upslope_cells.tolist(),
     }
 
 

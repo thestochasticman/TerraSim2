@@ -50,7 +50,26 @@ describe("RunViewer", () => {
     await waitFor(() => expect(select().disabled).toBe(false));
     fireEvent.change(select(), { target: { value: "tarrawarra" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ stub: "tarrawarra", writeEveryDays: 1, rootDepth: 0.3 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ stub: "tarrawarra", writeEveryDays: 1, rootDepth: 0.3, step: "bucket" })));
+  });
+
+  it("the model select goes into the request", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "routed" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "routed" })));
+  });
+
+  it("the subsurface model shows its leak and rain-hours fields and sends them", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    expect(screen.queryByLabelText("leak fraction")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
+    fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6 })));
   });
 
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {

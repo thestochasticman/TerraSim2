@@ -14,14 +14,14 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 ## Model inputs
 
 - The model assumes its inputs are already prepared. `troi_ingest` prepares them from a `Troi`; `terrasim2` consumes them. The handoff is a `ModelInputs` object: a `TerrainGrid`, a `CellToTileMap` on it, and `rain` and `pet` as `TileSeries` on the same tiles and dates, plus free-form `meta` provenance.
-- Soil comes from the Soil and Landscape Grid of Australia (SLGA) at 90 m, so it is held like SILO: a second `CellToTileMap` onto SLGA's pixels and, per pixel and depth layer, the prepared plant-available fraction and textural class (`SoilLayers`). A cell's capacity is that fraction summed over the layers the roots reach; `capacity.npy` holds it for the root depth recorded in `meta`, and `load_model_inputs(folder, root_depth)` recomputes it for another.
-- On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`, now 2): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`, and when the inputs carry soil layers `soil_tile_index.npy`, `soil_fraction.npy`, `soil_texture.npy` with the layer bounds in the manifest. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
+- Soil comes from the Soil and Landscape Grid of Australia (SLGA) at 90 m, so it is held like SILO: a second `CellToTileMap` onto SLGA's pixels and, per pixel and depth layer, the prepared plant-available fraction and textural class (`SoilLayers`). A cell's capacity is that fraction summed over the layers the roots reach; `capacity.npy` holds it for the root depth recorded in the manifest, and `load_model_inputs(folder, root_depth)` recomputes it for another. A run sees the soil as one `SoilHydraulics` built from the layers at the inputs' root depth: capacity, and from the stored Campbell curve the saturated conductivity (book eq. 6.34) and the contents at field capacity and wilting point, all per cell.
+- On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`, now 3): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`, and when the inputs carry soil layers `soil_tile_index.npy`, `soil_fraction.npy`, `soil_texture.npy`, `soil_campbell.npy` (theta_s, psi_e, b per layer and tile) with the layer bounds and the root depth in the manifest. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
 - `troi_ingest.ingest_to_disk(troi)` writes to `{troi.out_dir}/model_inputs` and skips the work when a manifest with the same version, stub, bbox and dates is already there.
 - `data/dev_sites/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
 
 ## Run outputs and the service
 
-- A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going) and `complete`. `load_run_result` opens it read-only; `RunResult` never copies the arrays.
+- A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going), `complete` and `flux_names` (what each index of the flux axis is, so readers need not know the step). `load_run_result` opens it read-only; `RunResult` never copies the arrays.
 - `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings, including the root depth) and the inputs' write time hash to a run id; the same request on the same inputs is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
 - Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified), `GET /soils/column` (one layered column's available water; query `textures`, `root_depth`, `model`). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
 
@@ -51,26 +51,32 @@ TerraSim2/
 │   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
+│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
-│   │   ├── step_function.py         # Protocol: (moisture, capacity, rain, pet, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
+│   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
+│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION; the subsurface step's flux axis
+│   │   ├── step_function.py         # Protocol: (moisture, soil_hydraulics, rain, pet, terrain_derivatives, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
 │   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
-│   │   ├── model_inputs.py          # grid + cell_map + rain + pet + meta + optional soil, checked for consistency; FORMAT_VERSION
+│   │   ├── model_inputs.py          # grid + cell_map + rain + pet + meta + optional soil and root_depth, checked for consistency; FORMAT_VERSION
 │   │   ├── soil_texture.py          # StrEnum of the 12 USDA textural classes, coarsest first; values as the book's tables spell them
 │   │   ├── campbell_params.py       # frozen dataclass of Campbell's retention curve: theta_s, psi_e, b (book eq. 5.27); floats, or arrays for one curve per cell
 │   │   ├── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
-│   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction and texture per layer; compute_capacity(root depth) -> mm per cell
-│   │   └── flow_network.py          # a terrain's drainage, built once: filled elevation, downstream cell (-1 at outlets), slope, visit order, upslope cell counts
+│   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction, texture and Campbell curve per layer; compute_capacity(root depth) -> mm per cell, compute_hydraulics(root depth) -> SoilHydraulics
+│   │   ├── soil_hydraulics.py       # each cell's soil over the root depth as arrays: capacity always; k_sat, b, theta_s, theta_fc, theta_wp when a curve is known; require_conductivity(); free_capacity = (theta_s - theta_fc) x root depth, mm
+│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
-│       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; in memory, or blocks into a zarr store
-│       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/meta
+│       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill in flow order within the day; only outlets shed runoff
+│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and leaks down by leak_fraction; rain infiltrates up to K_s g rain_hours; overflow and drainage cascade in flow order
+│       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one SoilHydraulics and one TerrainDerivatives per run; in memory, or blocks into a zarr store with flux_names in its attrs
+│       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/flux_names/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
 │       ├── load_run_result.py       # open a store read-only as a RunResult; refuses incomplete runs unless asked
-│       ├── write_model_inputs.py    # ModelInputs -> folder (manifest.json, .npy arrays, .csv series, soil_*.npy when soil is present)
-│       ├── load_model_inputs.py     # (folder, root_depth=None) -> ModelInputs; refuses other FORMAT_VERSIONs; a root depth recomputes capacity from the soil layers
+│       ├── write_model_inputs.py    # ModelInputs -> folder (manifest.json, .npy arrays, .csv series, soil_*.npy when soil is present, soil_campbell.npy when it carries a curve, root_depth in the manifest)
+│       ├── load_model_inputs.py     # (folder, root_depth=None) -> ModelInputs; refuses other FORMAT_VERSIONs; a root depth recomputes capacity from the soil layers and is recorded, else the manifest's
 │       ├── lookup_campbell_params.py          # SoilTexture -> CampbellParams from the book's table 5.3
 │       ├── compute_campbell_water_content.py  # (psi J/kg, CampbellParams) -> theta m3/m3; saturated at and above air entry
 │       ├── lookup_van_genuchten_params.py     # SoilTexture -> VanGenuchtenParams from the book's table 5.4
@@ -83,12 +89,14 @@ TerraSim2/
 │       ├── compute_geometric_mean_diameter.py # (sand, silt, clay fractions) -> d_g in micrometres, book eq. 2.36
 │       ├── estimate_campbell_params.py        # (d_g, theta_s) -> CampbellParams by the book's regressions, eqs. 5.36 and 5.37; array-valued per cell
 │       ├── lookup_typical_fractions.py        # SoilTexture -> typical (sand, silt, clay) fractions from the book's table 2.4
-│       ├── prepare_soil_layer.py              # (sand, silt, clay, bulk density kg/m3) -> (available fraction, texture index) by the book's continuous route; NaN-safe
+│       ├── prepare_soil_layer.py              # (sand, silt, clay, bulk density kg/m3) -> (available fraction, texture index, Campbell theta_s/psi_e/b) by the book's continuous route; NaN-safe
+│       ├── estimate_saturated_conductivity.py # (theta_s, psi_e, b) -> K_s kg s m-3 by book eq. 6.34
+│       ├── lookup_saturated_conductivity.py   # SoilTexture -> K_s kg s m-3 from the book's table 6.1 (silt filled by eq. 6.34)
+│       ├── compute_campbell_conductivity.py   # (theta, theta_s, b, K_s) -> K kg s m-3 by book eq. 6.35: K_s (theta/theta_s)^(2b+3)
 │       ├── fill_pits.py                       # elevation -> elevation with depressions raised to their spill level plus a faint slope (priority flood)
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
-│       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
-│       └── build_flow_network.py              # TerrainGrid -> FlowNetwork: fill, direct, order, count
+│       └── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
 │   ├── dense_sites.md     # the same table with caveats and provenance
@@ -121,17 +129,17 @@ TerraSim2/
 │       └── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, stress_exponent, initial_fullness, root_depth, write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
     │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (data/dev_sites by default)
-    │       ├── execute_run.py      # the worker: inputs + request -> run_model into a store, capacity from the soil at the request's root depth; also `python -m app.api.f.execute_run`
+    │       ├── execute_run.py      # the worker: inputs + request -> run_model with the requested step into a store, capacity from the soil at the request's root depth; also `python -m app.api.f.execute_run`
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
-    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts in the visualiser's JSON shape
-    │       ├── read_series.py      # grid-mean daily rain, pet, moisture and fluxes for the days written
+    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts (via TerrainDerivatives) in the visualiser's JSON shape
+    │       ├── read_series.py      # grid-mean daily rain, pet, moisture and the fluxes named in the store for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
     │       ├── compute_soil_column.py      # (6 textures, root depth, model) -> per-layer fraction, thickness in roots and mm on SLGA's depth intervals, plus the total
@@ -157,11 +165,11 @@ TerraSim2/
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
             │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given, capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, root depth field, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
+            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
-            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain up, evaporation + runoff stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
+            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff + drainage + leak stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
             │   ├── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
             │   ├── RetentionViewer.tsx        # fetches the book's curves via useRetentionCurves, caption, status/error, then RetentionChart
@@ -212,9 +220,9 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, upslopeCells?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, leakFraction, rainHours
                 ├── RunStatus.ts
-                ├── RunSeries.ts
+                ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, drainage, leak
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists

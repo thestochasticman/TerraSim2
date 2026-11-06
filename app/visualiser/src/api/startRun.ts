@@ -11,9 +11,12 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       stub: request.stub,
+      step: request.step,
       stress_exponent: request.stressExponent,
       initial_fullness: request.initialFullness,
       root_depth: request.rootDepth,
+      leak_fraction: request.leakFraction,
+      rain_hours: request.rainHours,
       write_every_days: request.writeEveryDays,
       record_fluxes: request.recordFluxes,
     }),
