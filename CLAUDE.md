@@ -18,6 +18,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 - On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`, now 3): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`, and when the inputs carry soil layers `soil_tile_index.npy`, `soil_fraction.npy`, `soil_texture.npy`, `soil_campbell.npy` (theta_s, psi_e, b per layer and tile) with the layer bounds and the root depth in the manifest. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
 - `troi_ingest.ingest_to_disk(troi)` writes to `{troi.out_dir}/model_inputs` and skips the work when a manifest with the same version, stub, bbox and dates is already there.
 - `data/dev_sites/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
+- Observations are held the same way. `troi_ingest.f.ingest_observations` reads the lab's compiled file (`~/Downloads/Dense_sites/all_sites_observations.parquet`, see `data/dense_sites.md`), locates each point on the site's window and averages a station's readings per day and depth interval; `python -m troi_ingest.f.ingest_site_observations` writes every site with observations to `{out_dir}/{stub}/observations`, copied into `data/dev_sites/{stub}/observations/` (`manifest.json` and `observations.npz`, versioned by `SiteObservations.FORMAT_VERSION`). A `SiteObservations` is cells, dates, stations, a depth interval and a volumetric content per point; `pair_run_with_observations` reads a run at each one through `compute_water_content` (`theta_wp + moisture / root depth`), and `score_pairs` gives n, bias, rmse, ubrmse, r, NSE and KGE, the scores TerraSim v1 used. Nerrigundah has no observations in the compiled file.
 
 ## Run outputs and the service
 
@@ -64,6 +65,7 @@ TerraSim2/
 │   │   ├── van_genuchten_params.py  # frozen dataclass of van Genuchten's curve: theta_s, theta_r, alpha, n; m = 1 - 1/n (book eq. 5.29)
 │   │   ├── soil_layers.py           # a layered soil per tile of a coarse soil source: CellToTileMap, layer bounds, available fraction, texture and Campbell curve per layer; compute_capacity(root depth) -> mm per cell, compute_hydraulics(root depth) -> SoilHydraulics
 │   │   ├── soil_hydraulics.py       # each cell's soil over the root depth as arrays: capacity always; k_sat, b, theta_s, theta_fc, theta_wp when a curve is known; require_conductivity(); free_capacity = (theta_s - theta_fc) x root depth, mm
+│   │   ├── site_observations.py     # point measurements of volumetric water content on a grid's cells: dates, row, col, station, depth interval, vwc, n; FORMAT_VERSION; select_day, select_layer
 │   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells
 │   └── f/
 │       ├── __init__.py
@@ -96,13 +98,20 @@ TerraSim2/
 │       ├── fill_pits.py                       # elevation -> elevation with depressions raised to their spill level plus a faint slope (priority flood)
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
-│       └── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       ├── write_site_observations.py         # SiteObservations -> folder (manifest.json, observations.npz)
+│       ├── load_site_observations.py          # folder -> SiteObservations; refuses other FORMAT_VERSIONs
+│       ├── compute_water_content.py           # (moisture mm, SoilHydraulics) -> theta m3/m3 over the root depth: theta_wp + moisture / depth
+│       ├── pair_run_with_observations.py      # (RunResult, SiteObservations, SoilHydraulics, days_available) -> modelled theta per observation, read in blocks of days; NaN outside the run
+│       ├── score_pairs.py                     # (observed, modelled) -> n, means, bias, rmse, ubrmse, r, nse, kge; non-finite pairs dropped
+│       └── score_pairs_by_key.py              # the same per group of a key (date, station), keys sorted
 ├── data/
 │   ├── dense_sites.csv    # one row per validation site: stub, bbox (WSEN), start, end; source of truth for site Trois
 │   ├── dense_sites.md     # the same table with caveats and provenance
-│   └── dev_sites/         # committed prepared inputs, ~13 MB in all
+│   └── dev_sites/         # committed prepared inputs and observations, ~17 MB in all
 │       ├── example/model_inputs/        # lab example region, January 2024
 │       ├── esdale/model_inputs/         # one folder per site in data/dense_sites.csv ...
+│       ├── esdale/observations/         # ... and its observations where the compiled file has them (all but nerrigundah)
 │       ├── llara/model_inputs/
 │       ├── mri/model_inputs/
 │       ├── sasmas_stanley/model_inputs/
@@ -126,7 +135,11 @@ TerraSim2/
 │       ├── ingest_to_disk.py    # Troi -> folder via write_model_inputs; skips when the manifest is current
 │       ├── read_dense_sites.py  # data/dense_sites.csv -> list of site dicts (stub, bbox, start, end)
 │       ├── make_site_troi.py    # stub -> Troi from the site table, under a given Config
-│       └── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
+│       ├── ingest_sites.py      # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_sites [stubs]` runs every site
+│       ├── locate_points_on_window.py   # (lon, lat, bbox) -> (row, col, inside) on the bbox's Sentinel-2 window
+│       ├── read_dense_observations.py   # (parquet sites, path) -> DataFrame of the compiled observation file's rows
+│       ├── ingest_observations.py       # stub -> SiteObservations on the site's window: points located, dropped outside and counted, a station's readings averaged per day and depth; SITE_SOURCES maps stubs to the file's sites
+│       └── ingest_site_observations.py  # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_site_observations [stubs]`; checks the shape against the committed inputs
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
     │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, write_every_days, chunk_days, record_fluxes

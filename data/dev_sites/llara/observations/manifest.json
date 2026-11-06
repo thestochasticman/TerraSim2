@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "rows": 189,
+  "cols": 397,
+  "n_points": 366240,
+  "stations": [
+    "WE_1201",
+    "WE_1202",
+    "WE_1203",
+    "WE_1204",
+    "WE_1205",
+    "WE_1206",
+    "WE_1207",
+    "WE_1208",
+    "WE_1601",
+    "WE_1602",
+    "WE_1603",
+    "WE_1604",
+    "WE_1605",
+    "WE_1606",
+    "WE_1607",
+    "WE_1608",
+    "WW_1201",
+    "WW_1202",
+    "WW_1203",
+    "WW_1204",
+    "WW_1205",
+    "WW_1206",
+    "WW_1207",
+    "WW_1208",
+    "WW_1601",
+    "WW_1602",
+    "WW_1603",
+    "WW_1604",
+    "WW_1605",
+    "WW_1606",
+    "WW_1607",
+    "WW_1608"
+  ],
+  "start": "2021-10-19",
+  "end": "2024-06-30",
+  "n_dates": 955,
+  "file": "observations.npz",
+  "columns": {
+    "dates": {
+      "units": "datetime64[D]"
+    },
+    "row": {
+      "units": "dimensionless"
+    },
+    "col": {
+      "units": "dimensionless"
+    },
+    "station": {
+      "units": "index into stations"
+    },
+    "depth_top": {
+      "units": "m"
+    },
+    "depth_bottom": {
+      "units": "m"
+    },
+    "vwc": {
+      "units": "m3 m-3"
+    },
+    "n": {
+      "units": "readings averaged"
+    }
+  },
+  "written_at": "2026-11-06T21:25:13+00:00",
+  "meta": {
+    "stub": "llara",
+    "source": "/home/yasar/Downloads/Dense_sites/all_sites_observations.parquet",
+    "sources": [
+      "llara"
+    ],
+    "n_rows_read": 367653,
+    "n_outside_window": 0,
+    "n_outside_dates": 0,
+    "n_invalid": 0,
+    "n_readings": 367653
+  }
+}

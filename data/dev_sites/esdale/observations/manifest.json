@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "rows": 242,
+  "cols": 290,
+  "n_points": 2767,
+  "stations": [
+    "10e",
+    "10o",
+    "11e",
+    "11o",
+    "12e",
+    "12o",
+    "13e",
+    "13o",
+    "14e",
+    "14o",
+    "15e",
+    "15o",
+    "16e",
+    "16o",
+    "17e",
+    "17o",
+    "18e",
+    "18o",
+    "19e",
+    "19o",
+    "1e",
+    "1o",
+    "20e",
+    "20o",
+    "21e",
+    "21o",
+    "22e",
+    "22o",
+    "23e",
+    "23o",
+    "24e",
+    "24o",
+    "25e",
+    "25o",
+    "26e",
+    "26o",
+    "27e",
+    "27o",
+    "28e",
+    "28o",
+    "29e",
+    "29o",
+    "2e",
+    "2o",
+    "30e",
+    "30o",
+    "31e",
+    "31o",
+    "32e",
+    "32o",
+    "33e",
+    "33o",
+    "34e",
+    "34o",
+    "35e",
+    "35o",
+    "36e",
+    "36o",
+    "37e",
+    "37o",
+    "38e",
+    "38o",
+    "39e",
+    "39o",
+    "3e",
+    "3o",
+    "40e",
+    "40o",
+    "4e",
+    "4o",
+    "5e",
+    "5o",
+    "6e",
+    "6o",
+    "7e",
+    "7o",
+    "8e",
+    "9e",
+    "9o",
+    "WS-201f28e185df",
+    "WS-4aa144a4eafe",
+    "WS-555215c413db",
+    "WS-57c7afe16ae1",
+    "WS-a2f10ef43bc1",
+    "WS-a84d3fd5d4ca",
+    "WS-f575dcdea0dc"
+  ],
+  "start": "2025-04-30",
+  "end": "2026-07-01",
+  "n_dates": 360,
+  "file": "observations.npz",
+  "columns": {
+    "dates": {
+      "units": "datetime64[D]"
+    },
+    "row": {
+      "units": "dimensionless"
+    },
+    "col": {
+      "units": "dimensionless"
+    },
+    "station": {
+      "units": "index into stations"
+    },
+    "depth_top": {
+      "units": "m"
+    },
+    "depth_bottom": {
+      "units": "m"
+    },
+    "vwc": {
+      "units": "m3 m-3"
+    },
+    "n": {
+      "units": "readings averaged"
+    }
+  },
+  "written_at": "2026-11-06T21:25:13+00:00",
+  "meta": {
+    "stub": "esdale",
+    "source": "/home/yasar/Downloads/Dense_sites/all_sites_observations.parquet",
+    "sources": [
+      "esdale",
+      "phenode"
+    ],
+    "n_rows_read": 2767,
+    "n_outside_window": 0,
+    "n_outside_dates": 0,
+    "n_invalid": 0,
+    "n_readings": 2767
+  }
+}

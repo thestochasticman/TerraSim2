@@ -26,6 +26,19 @@ Tarrawarra uses the bbox its own documentation prescribes.
 - **Tarrawarra** came through an upstream AGD66 conversion with a documented rotation. The bbox is from the converted points.
 - **The source folder is a partial copy.** Its READMEs reference prepared observation files for Llara, MRI and Nerrigundah, and a `Validation_tables` folder, that are not present. Llara and MRI observations are in `all_sites_observations.parquet`. Nerrigundah has raw files only.
 
+## Observations on disk
+
+`python -m troi_ingest.f.ingest_site_observations` reads `all_sites_observations.parquet` (expected at `~/Downloads/Dense_sites/`, or pass another path) and writes one `observations/` folder per site with observations, copied into `data/dev_sites/{stub}/observations/`. Each folder is `manifest.json` plus `observations.npz` with one array per column: `dates`, `row`, `col` (the cell on the site's Sentinel-2 window), `station`, `depth_top`, `depth_bottom` (m), `vwc` (m3 m-3) and `n` (readings averaged). A station's readings on one day over one depth interval are averaged, weighted by `n`. Points outside the window or the site's dates are dropped and counted in the manifest's `meta`.
+
+| stub | file sites | observations | stations | dates | depth intervals |
+|---|---|---|---|---|---|
+| esdale | esdale, phenode | 2,767 | 86 | 360 | 0–0.076 m (campaign), 0–0.1 m (Phenode) |
+| llara | llara | 366,240 | 32 | 955 | 0.05–0.15 m and on in 0.1 m steps |
+| mri | mri | 179,287 | 18 | 1,930 | 0.05–0.15 m and on in 0.1 m steps |
+| sasmas_stanley | sasmas, the 7 Stanley stations inside the bbox | 8,936 | 7 | 1,452 | 0–0.3, 0–0.6, 0–0.9 m |
+| tarrawarra | tarrawarra | 8,644 | 3,610 points | 19 (13 campaigns, some over two or three days) | 0–0.3 m |
+| nerrigundah | none in the file | | | | |
+
 ## Source files used
 
 - `all_sites_observations.parquet`: 590,330 rows; columns site, station, lon, lat, time, depth_top_m, depth_bottom_m, vwc, n. Covers esdale, llara, mri, phenode, sasmas, tarrawarra.
