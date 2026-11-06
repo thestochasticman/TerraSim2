@@ -45,10 +45,7 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
     Path
         ``store_folder``.
     """
-    inputs = load_model_inputs(inputs_folder)
-    if inputs.soil is not None:
-        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
-    inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
+    inputs = _prepare_inputs(request, inputs_folder)
     step, flux_enum = STEPS[request.step]
     if request.step == "subsurface":
         params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, leak_fraction=request.leak_fraction, rain_hours=request.rain_hours)
@@ -67,6 +64,16 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
         flux_names=[f.name.lower() for f in flux_enum],
     )
     return Path(store_folder)
+
+
+def _prepare_inputs(request: RunRequest, inputs_folder: Path):
+    """Load the inputs at the request's root depth, so capacity and the soil hydraulics agree, and set the start state."""
+    inputs = load_model_inputs(inputs_folder)
+    if inputs.soil is not None:
+        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
+        inputs.root_depth = request.root_depth
+    inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
+    return inputs
 
 
 def t():
@@ -95,6 +102,9 @@ def t():
     sub = load_run_result(subsurface)
     assert sub.n_fluxes == 6 and zarr.open_group(subsurface, mode="r").attrs["flux_names"][3] == "leak"
     assert np.isfinite(sub.get_moisture(30)).all()
+    prepared = _prepare_inputs(RunRequest(stub="example", root_depth=1.0), find_inputs("example"))
+    assert prepared.root_depth == 1.0, "the soil hydraulics must be built at the request's depth, not the manifest's"
+    assert prepared.grid.capacity.mean() > 2 * np.load(find_inputs("example") / "capacity.npy").mean()
 
 
 if __name__ == "__main__":

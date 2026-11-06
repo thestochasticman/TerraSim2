@@ -17,6 +17,8 @@ export type TerrainSurfaceProps = {
   moisture?: Float32Array;
   /** "relative" stretches the day's moisture over its own range; "capacity" and "upslope" colour by the grid's fields when it has them. Default "moisture". */
   colourBy?: ColourBy;
+  /** What moisture is a fraction of, per cell, mm; defaults to the grid's capacity. A step with a free store passes capacity plus free capacity. */
+  fullCapacity?: Float64Array;
 };
 
 /** The surface's colour when there is nothing to colour by: an earth tone, RGB in 0..1. */
@@ -34,7 +36,7 @@ export const EARTH_TONE: [number, number, number] = [0x8c / 255, 0x9a / 255, 0x6
  * a shader recompile that nothing triggers, and the surface would show its
  * white base colour; a constant mode avoids that.
  */
-export function TerrainSurface({ grid, moisture, colourBy = "moisture" }: TerrainSurfaceProps) {
+export function TerrainSurface({ grid, moisture, colourBy = "moisture", fullCapacity }: TerrainSurfaceProps) {
   const geometry = useMemo(() => {
     const g = createTerrainGeometry(grid);
     g.setAttribute("color", new BufferAttribute(createUniformColours(grid.rows * grid.cols, EARTH_TONE), 3));
@@ -53,11 +55,11 @@ export function TerrainSurface({ grid, moisture, colourBy = "moisture" }: Terrai
 
   useEffect(() => {
     const colours =
-      byCapacity && grid.capacity ? computeCapacityColours(grid.capacity) : byUpslope && grid.upslopeCells ? computeUpslopeColours(grid.upslopeCells) : byMoisture && moisture ? (relative ? computeRelativeMoistureColours(moisture) : computeVertexColours(moisture, grid.capacity)) : createUniformColours(grid.rows * grid.cols, EARTH_TONE);
+      byCapacity && grid.capacity ? computeCapacityColours(grid.capacity) : byUpslope && grid.upslopeCells ? computeUpslopeColours(grid.upslopeCells) : byMoisture && moisture ? (relative ? computeRelativeMoistureColours(moisture) : computeVertexColours(moisture, fullCapacity ?? grid.capacity)) : createUniformColours(grid.rows * grid.cols, EARTH_TONE);
     const attribute = geometry.getAttribute("color") as BufferAttribute;
     (attribute.array as Float32Array).set(colours);
     attribute.needsUpdate = true;
-  }, [geometry, grid, moisture, byCapacity, byUpslope, byMoisture, relative]);
+  }, [geometry, grid, moisture, byCapacity, byUpslope, byMoisture, relative, fullCapacity]);
 
   return (
     <mesh geometry={geometry}>

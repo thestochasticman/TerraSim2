@@ -38,7 +38,9 @@ def step_subsurface_bucket_model(
 
        and leaks straight down at ``K(theta) * g * leak_fraction``.
        Both are taken from the start-of-day state and capped at the free
-       water.
+       water. The flow width is taken as one cell size whatever the
+       direction; a diagonal neighbour's slope already uses the longer
+       distance, so this overstates diagonal flow by at most sqrt(2).
     3. Excess and drainage cascade from the ridges down. Water arriving
        through the soil enters up to the room left; water arriving over
        the surface enters up to the room and the infiltration limit; the
@@ -227,7 +229,7 @@ def t5():
         moisture, _ = step_subsurface_bucket_model(moisture, h, rain, pet, d, SubsurfaceBucketParams())
     assert moisture[0, 0] < moisture[0, 5] < moisture[0, 10]
     assert moisture[0, 10] - moisture[0, 0] > 10.0
-    assert moisture[0, 0] < 70.0, "the crest has lost most of its free water; it is still above field capacity because the step above it keeps feeding it"
+    assert moisture[0, 0] < 70.0, "the crest has lost most of its free water; what remains drains ever more slowly as its conductivity falls"
 
 
 def t6():

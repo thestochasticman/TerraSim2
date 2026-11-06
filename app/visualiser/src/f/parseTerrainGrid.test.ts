@@ -28,6 +28,11 @@ describe("parseTerrainGrid", () => {
     expect(Array.from(grid.capacity ?? [])).toEqual([100, 100, 80, 100, 90, 100]);
   });
 
+  it("reads free capacity when present and treats null as absent", () => {
+    expect(Array.from(parseTerrainGrid({ ...valid, free_capacity: [[60, 60, 60], [70, 70, 70]] }).freeCapacity ?? [])).toEqual([60, 60, 60, 70, 70, 70]);
+    expect(parseTerrainGrid({ ...valid, free_capacity: null }).freeCapacity).toBeUndefined();
+  });
+
   it("reads upslope cells when present, with the same layout", () => {
     const grid = parseTerrainGrid({ ...valid, upslope_cells: [[1, 1, 1], [2, 3, 6]] });
     expect(Array.from(grid.upslopeCells ?? [])).toEqual([1, 1, 1, 2, 3, 6]);

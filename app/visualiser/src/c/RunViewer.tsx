@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
@@ -76,6 +76,12 @@ export function RunViewer() {
   const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
   const capacityRange = terrain?.capacity ? computeFiniteRange(terrain.capacity) : null;
   const upslopeRange = terrain?.upslopeCells ? computeFiniteRange(terrain.upslopeCells) : null;
+  const relativeRange = useMemo(() => (shown ? computeFiniteRange(shown.moisture) : null), [shown]);
+  // A subsurface run holds water up to saturation, so its fullness is over the plant store plus the free store.
+  const fullCapacity = useMemo(() => {
+    if (!terrain?.capacity || !terrain.freeCapacity || request?.step !== "subsurface") return undefined;
+    return terrain.capacity.map((c, i) => c + (terrain.freeCapacity?.[i] ?? 0));
+  }, [terrain, request]);
 
   return (
     <div className={styles.viewer}>
@@ -133,11 +139,11 @@ export function RunViewer() {
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
           </span>
         )}
-        {colourBy === "relative" && shown && (() => { const r = computeFiniteRange(shown.moisture); return r ? (
+        {colourBy === "relative" && relativeRange && (
           <span data-testid="relative-legend">
-            {r.min.toFixed(1)} to {r.max.toFixed(1)} mm this day, light to dark
+            {relativeRange.min.toFixed(1)} to {relativeRange.max.toFixed(1)} mm this day, light to dark
           </span>
-        ) : null; })()}
+        )}
         {colourBy === "upslope" && upslopeRange && (
           <span data-testid="upslope-legend">
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
@@ -156,7 +162,7 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );

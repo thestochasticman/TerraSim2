@@ -134,11 +134,11 @@ TerraSim2/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
     │       ├── find_inputs.py      # stub -> model_inputs folder, searching roots in order (data/dev_sites by default)
-    │       ├── execute_run.py      # the worker: inputs + request -> run_model with the requested step into a store, capacity from the soil at the request's root depth; also `python -m app.api.f.execute_run`
+    │       ├── execute_run.py      # the worker: inputs + request -> run_model with the requested step into a store, inputs prepared at the request's root depth (capacity and hydraulics alike); also `python -m app.api.f.execute_run`
     │       ├── launch_run.py       # start execute_run as a subprocess; writes request.json and worker.log beside the store
     │       ├── read_run_status.py  # store -> missing | running | complete, days_written, shape, dates
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
-    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity at that root depth and upslope cell counts (via TerrainDerivatives) in the visualiser's JSON shape
+    │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity and free capacity at that root depth and upslope cell counts (via TerrainDerivatives) in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and the fluxes named in the store for the days written
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
@@ -164,7 +164,7 @@ TerraSim2/
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity or drainage with colourBy="capacity" or "upslope", else an earth tone (switching the material mode after it has drawn leaves it white)
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity or drainage with colourBy="capacity" or "upslope", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
             │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
             │   ├── RunViewer.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
@@ -219,7 +219,7 @@ TerraSim2/
             │   ├── useTextureTriangle.ts      # fetch the classified triangle once on mount
             │   └── useSoilColumn.ts           # refetch a column as its textures, root depth or model change; keeps the last column on a failure
             └── t/
-                ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, upslopeCells?
+                ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, freeCapacity?, upslopeCells?
                 ├── TerrainMesh.ts
                 ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, leakFraction, rainHours
                 ├── RunStatus.ts
