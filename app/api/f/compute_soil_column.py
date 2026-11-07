@@ -7,6 +7,7 @@ from terrasim2.f.compute_layer_thickness_in_depth import compute_layer_thickness
 from terrasim2.f.compute_van_genuchten_water_content import compute_van_genuchten_water_content
 from terrasim2.f.lookup_campbell_params import lookup_campbell_params
 from terrasim2.f.lookup_van_genuchten_params import lookup_van_genuchten_params
+from terrasim2.k.soil_conventions import SoilConventions
 from terrasim2.k.soil_texture import SoilTexture
 
 # The six standard depth intervals of the Soil and Landscape Grid of Australia, in metres.
@@ -30,11 +31,15 @@ def compute_soil_column(textures: list[str], root_depth: float, model: str = "ca
     model : str
         "campbell" or "van_genuchten": whose table gives each layer's curve.
 
+    The limits are read at the model's ``SoilConventions``, so the column
+    holds what a run's capacity would.
+
     Returns
     -------
     dict
         ``textures`` : the twelve classes in ramp order.
         ``layer_bounds`` : m. ``root_depth`` : m. ``model``.
+        ``conventions`` : the suctions, J kg-1, field capacity and wilting point are read at.
         ``layers`` : one record per layer with ``top``, ``bottom`` (m),
         ``texture``, ``fraction`` (m3 m-3 available), ``thickness_in_roots``
         (m) and ``mm`` (available water within the roots).
@@ -48,7 +53,8 @@ def compute_soil_column(textures: list[str], root_depth: float, model: str = "ca
     if not root_depth > 0:
         raise ValueError("root_depth must be positive")
     curve, lookup = _CURVES[model]
-    fraction = np.array([float(compute_available_fraction(curve, lookup(tex))) for tex in textures])
+    conventions = SoilConventions()
+    fraction = np.array([float(compute_available_fraction(curve, lookup(tex), conventions.field_capacity_suction, conventions.wilting_point_suction)) for tex in textures])
     thickness = compute_layer_thickness_in_depth(LAYER_BOUNDS, root_depth)
     total = float(compute_capacity_map(fraction, LAYER_BOUNDS, root_depth))
     layers = [
@@ -67,6 +73,7 @@ def compute_soil_column(textures: list[str], root_depth: float, model: str = "ca
         "layer_bounds": LAYER_BOUNDS.tolist(),
         "root_depth": root_depth,
         "model": model,
+        "conventions": {"field_capacity_suction": conventions.field_capacity_suction, "wilting_point_suction": conventions.wilting_point_suction},
         "layers": layers,
         "total": total,
     }
@@ -84,8 +91,10 @@ def t():
     assert out["layers"][3]["texture"] == "clay" and out["layers"][3]["mm"] > out["layers"][2]["mm"]
     assert out["layers"][5]["mm"] == 0.0
     json.dumps(out)
-    deep = compute_soil_column(["clay"] * 6, 2.0, "van_genuchten")
-    assert 280 < deep["total"] < 300
+    assert out["conventions"] == {"field_capacity_suction": -10.0, "wilting_point_suction": -500.0}
+    deep = compute_soil_column(["clay"] * 6, 2.0, "campbell")
+    assert deep["total"] > compute_soil_column(["sand"] * 6, 2.0, "campbell")["total"] > 0
+    assert compute_soil_column(["clay"] * 6, 2.0, "van_genuchten")["total"] > 0
     for bad in (dict(textures=["sand"] * 5, root_depth=1.0), dict(textures=["peat"] + ["sand"] * 5, root_depth=1.0), dict(textures=["sand"] * 6, root_depth=0.0), dict(textures=["sand"] * 6, root_depth=1.0, model="rosetta")):
         try:
             compute_soil_column(**bad)

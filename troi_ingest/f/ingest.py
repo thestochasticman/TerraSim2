@@ -58,11 +58,12 @@ def ingest(troi: Troi) -> ModelInputs:
             "pet": "SILO et_short_crop (FAO56 short crop) via pysilo, nearest 0.05 degree point",
             "soil": "SLGA v2 clay, sand, silt and bulk density at six depths via pyslga, nearest 90 m pixel; "
             "Campbell curve from the geometric mean diameter (Bittelli et al. 2015 eqs. 2.36, 5.36, 5.37), "
-            "theta_s = 1 - bulk density / 2650; available water between -33 and -1500 J/kg",
+            f"theta_s = 1 - bulk density / 2650; available water between {soil.conventions.field_capacity_suction:g} and {soil.conventions.wilting_point_suction:g} J/kg "
+            "(SoilConventions, calibrated against APSoil's measured limits)",
             "capacity": "soil available water summed over layers down to root_depth",
         },
     }
-    return ModelInputs(grid, cell_map, rain, pet, meta=meta, soil=soil, root_depth=ROOT_DEPTH, latitude=(troi.bbox[1] + troi.bbox[3]) / 2)
+    return ModelInputs(grid, cell_map, rain, pet, meta=meta, soil=soil, root_depth=ROOT_DEPTH, latitude=round((troi.bbox[1] + troi.bbox[3]) / 2, 6))
 
 
 def t1():

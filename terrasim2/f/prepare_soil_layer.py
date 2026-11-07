@@ -5,18 +5,20 @@ from terrasim2.f.compute_available_fraction import compute_available_fraction
 from terrasim2.f.compute_campbell_water_content import compute_campbell_water_content
 from terrasim2.f.compute_geometric_mean_diameter import compute_geometric_mean_diameter
 from terrasim2.f.estimate_campbell_params import estimate_campbell_params
+from terrasim2.k.soil_conventions import SoilConventions
 
 PARTICLE_DENSITY = 2650.0
 
 
-def prepare_soil_layer(sand: np.ndarray, silt: np.ndarray, clay: np.ndarray, bulk_density: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def prepare_soil_layer(sand: np.ndarray, silt: np.ndarray, clay: np.ndarray, bulk_density: np.ndarray, conventions: SoilConventions = SoilConventions()) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """One soil layer's available water, texture and Campbell curve from measured properties.
 
     The book's continuous route: the three fractions give a geometric mean
     diameter (eq. 2.36), which gives Campbell's air entry and b (eqs. 5.36
     and 5.37); the saturated content is the porosity ``1 - bulk_density /
-    2650``; the available fraction is the curve's content at -33 J/kg
-    minus that at -1500 J/kg. The textural class is the USDA triangle's.
+    2650``; the available fraction is the curve's content at the
+    conventions' field capacity minus that at their wilting point. The
+    textural class is the USDA triangle's.
 
     Parameters
     ----------
@@ -25,6 +27,8 @@ def prepare_soil_layer(sand: np.ndarray, silt: np.ndarray, clay: np.ndarray, bul
         one. NaN where unknown.
     bulk_density : ndarray, kg m-3
         Dry bulk density, same shape. NaN where unknown.
+    conventions : SoilConventions
+        Where on the curve field capacity and wilting point are read.
 
     Returns
     -------
@@ -52,7 +56,7 @@ def prepare_soil_layer(sand: np.ndarray, silt: np.ndarray, clay: np.ndarray, bul
     if np.any(usable):
         diameter = compute_geometric_mean_diameter(*(f[usable] for f in fractions))
         params = estimate_campbell_params(diameter, theta_s[usable])
-        available[usable] = compute_available_fraction(compute_campbell_water_content, params)
+        available[usable] = compute_available_fraction(compute_campbell_water_content, params, conventions.field_capacity_suction, conventions.wilting_point_suction)
         campbell[0][usable], campbell[1][usable], campbell[2][usable] = params.theta_s, params.psi_e, params.b
     return available, texture, campbell
 
@@ -66,8 +70,11 @@ def t1():
     assert texture.tolist() == [0, 11]
     assert campbell.shape == (3, 2) and np.allclose(campbell[0], 1 - 1400 / 2650)
     assert campbell[1, 0] > campbell[1, 1] and campbell[2, 0] < campbell[2, 1], "sand: wetter air entry, smaller b"
-    assert 0.01 < available[0] < 0.06 and 0.10 < available[1] < 0.25
-    assert available[0] < available[1] / 3
+    assert 0.03 < available[0] < 0.12 and 0.15 < available[1] < 0.35
+    assert available[0] < available[1] / 2
+    book, _, _ = prepare_soil_layer(sand, silt, clay, np.array([1400.0, 1400.0]), SoilConventions(-33.0, -1500.0))
+    assert np.all(book < available), "the book's narrower limits hold less"
+    assert 0.01 < book[0] < 0.06 and 0.10 < book[1] < 0.25
 
 
 def t2():

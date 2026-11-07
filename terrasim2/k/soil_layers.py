@@ -7,6 +7,7 @@ from terrasim2.f.compute_layer_thickness_in_depth import compute_layer_thickness
 from terrasim2.f.estimate_saturated_conductivity import estimate_saturated_conductivity
 from terrasim2.k.campbell_params import CampbellParams
 from terrasim2.k.cell_to_tile_map import CellToTileMap
+from terrasim2.k.soil_conventions import SoilConventions
 from terrasim2.k.soil_hydraulics import SoilHydraulics
 from terrasim2.k.soil_texture import SoilTexture
 
@@ -38,15 +39,19 @@ class SoilLayers:
         Shape (3, L, n_tiles): Campbell's ``theta_s`` (m3 m-3), ``psi_e``
         (J kg-1) and ``b`` (dimensionless) per layer and tile, NaN where
         unknown. Absent for soils prepared without a curve.
+    conventions : SoilConventions
+        Where on the curve ``available_fraction`` was read, so the
+        hydraulics read their field capacity and wilting point at the
+        same places.
 
     Attributes
     ----------
-    cell_map, layer_bounds, available_fraction, texture_index, campbell : as given, as arrays
+    cell_map, layer_bounds, available_fraction, texture_index, campbell, conventions : as given, as arrays
     n_layers, n_tiles : int, dimensionless
     shape : tuple[int, int], dimensionless, the terrain's (rows, cols)
     """
 
-    def __init__(self, cell_map: CellToTileMap, layer_bounds: npt.ArrayLike, available_fraction: npt.ArrayLike, texture_index: npt.ArrayLike, campbell: npt.ArrayLike | None = None):
+    def __init__(self, cell_map: CellToTileMap, layer_bounds: npt.ArrayLike, available_fraction: npt.ArrayLike, texture_index: npt.ArrayLike, campbell: npt.ArrayLike | None = None, conventions: SoilConventions = SoilConventions()):
         bounds = np.array(layer_bounds, dtype=np.float64)
         if bounds.ndim != 1 or bounds.size < 2 or bounds[0] != 0 or np.any(np.diff(bounds) <= 0):
             raise ValueError("layer_bounds must be one ascending vector starting at 0")
@@ -73,6 +78,7 @@ class SoilLayers:
         self.available_fraction: np.ndarray = fraction
         self.texture_index: np.ndarray = texture.astype(np.int8)
         self.campbell: np.ndarray | None = curve
+        self.conventions = conventions
 
     @property
     def n_layers(self) -> int:
@@ -154,8 +160,8 @@ class SoilLayers:
         if np.any(known):
             params = CampbellParams(theta_s[known], psi_e[known], b[known])
             k_sat[known] = estimate_saturated_conductivity(params.theta_s, params.psi_e, params.b)
-            theta_fc[known] = compute_campbell_water_content(-33.0, params)
-            theta_wp[known] = compute_campbell_water_content(-1500.0, params)
+            theta_fc[known] = compute_campbell_water_content(self.conventions.field_capacity_suction, params)
+            theta_wp[known] = compute_campbell_water_content(self.conventions.wilting_point_suction, params)
         return SoilHydraulics(capacity, root_depth, k_sat, b, theta_s, theta_fc, theta_wp)
 
     def get_texture_on_cells(self, layer: int) -> np.ndarray:
@@ -236,6 +242,9 @@ def t3():
     assert np.isclose(h.b[0, 0], 1.69) and np.isclose(h.b[0, 2], 4.55), "within the top 0.3 m each tile is one soil"
     assert h.k_sat[0, 0] > 3 * h.k_sat[0, 2], "eq. 6.34 compresses the table's sand-to-loam ratio of 16 to about 4.6"
     assert h.theta_wp[0, 0] < h.theta_fc[0, 0] < h.theta_s[0, 0]
+    assert np.isclose(h.theta_fc[0, 0], 0.37 * (0.73 / 10.0) ** (1 / 1.69)) and np.isclose(h.theta_wp[0, 0], 0.37 * (0.73 / 500.0) ** (1 / 1.69)), "read at the conventions' suctions"
+    book = SoilLayers(soil.cell_map, soil.layer_bounds, soil.available_fraction, soil.texture_index, soil.campbell, SoilConventions(-33.0, -1500.0)).compute_hydraulics(0.3)
+    assert book.theta_fc[0, 0] < h.theta_fc[0, 0] and book.theta_wp[0, 0] < h.theta_wp[0, 0], "the book's drier suctions read lower contents"
     deep = soil.compute_hydraulics(1.0)
     assert np.isclose(deep.b[0, 0], 0.3 * 1.69 + 0.7 * 7.63) and np.isclose(deep.theta_s[0, 0], 0.3 * 0.37 + 0.7 * 0.50)
     assert np.isclose(deep.b[0, 2], 4.55)
