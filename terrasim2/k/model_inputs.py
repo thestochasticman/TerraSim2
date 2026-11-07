@@ -30,9 +30,10 @@ class ModelInputs:
         The layered soil on ``grid``, from which a capacity can be computed
         for any root depth. ``grid.capacity`` holds the capacity for
         ``root_depth``; absent for inputs with no soil product.
-    root_depth : float, m, optional
+    root_depth : float or array_like, m, optional
         The root depth ``grid.capacity`` was computed for, when soil is
-        present. A run derives its soil hydraulics at this depth.
+        present: one value, or a field of the grid's shape where roots
+        vary by cell. A run derives its soil hydraulics at this depth.
 
     Attributes
     ----------
@@ -44,7 +45,7 @@ class ModelInputs:
 
     FORMAT_VERSION = 3
 
-    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | None = None):
+    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None):
         if cell_map.grid is not grid:
             raise ValueError("cell_map must be built on grid")
         if rain.n_tiles != cell_map.n_tiles or pet.n_tiles != cell_map.n_tiles:
@@ -53,10 +54,15 @@ class ModelInputs:
             raise ValueError("rain and pet must cover the same dates")
         if soil is not None and soil.cell_map.grid is not grid:
             raise ValueError("soil must be laid out on grid")
-        if root_depth is not None and not root_depth > 0:
-            raise ValueError("root_depth must be positive")
+        self.root_depth: float | np.ndarray | None = None
+        if root_depth is not None:
+            depth = np.asarray(root_depth, dtype=np.float64)
+            if depth.ndim not in (0, 2) or (depth.ndim == 2 and depth.shape != grid.shape):
+                raise ValueError(f"root_depth must be one value or a field of the grid's shape {grid.shape}")
+            if not np.all(depth > 0):
+                raise ValueError("root_depth must be positive")
+            self.root_depth = float(depth) if depth.ndim == 0 else depth
         self.soil = soil
-        self.root_depth = None if root_depth is None else float(root_depth)
         self.grid = grid
         self.cell_map = cell_map
         self.rain = rain
@@ -112,12 +118,15 @@ def t2():
     own_soil = SoilLayers(cell_map, [0.0, 1.0], np.full((1, 2), 0.1), np.zeros((1, 2), dtype=int))
     with_soil = ModelInputs(grid, cell_map, rain, pet, soil=own_soil, root_depth=0.3)
     assert with_soil.soil is own_soil and with_soil.root_depth == 0.3
-    try:
-        ModelInputs(grid, cell_map, rain, pet, root_depth=0.0)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("expected ValueError for a non-positive root depth")
+    varied = ModelInputs(grid, cell_map, rain, pet, soil=own_soil, root_depth=np.full((2, 3), 0.5))
+    assert isinstance(varied.root_depth, np.ndarray) and varied.root_depth.shape == (2, 3)
+    for bad in (0.0, np.full((3, 2), 0.5), np.array([[0.5, 0.5, 0.0], [0.5, 0.5, 0.5]])):
+        try:
+            ModelInputs(grid, cell_map, rain, pet, root_depth=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for a bad root depth")
     wide = TileSeries("pet", "mm", rain.dates, np.ones((2, 3)))
     shifted = TileSeries("pet", "mm", ["2024-01-02", "2024-01-03"], np.ones((2, 2)))
     for args in ((grid, other_map, rain, pet), (grid, cell_map, rain, wide), (grid, cell_map, rain, shifted)):

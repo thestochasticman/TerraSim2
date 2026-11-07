@@ -44,6 +44,8 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
         ``folder``.
     """
     folder = Path(folder)
+    if isinstance(inputs.root_depth, np.ndarray):
+        raise ValueError("model inputs on disk carry one root depth; a field of depths is set at run time from a vegetation map, not written")
     folder.mkdir(parents=True, exist_ok=True)
 
     np.save(folder / "elevation.npy", inputs.grid.elevation.astype(np.float64))
@@ -163,6 +165,21 @@ def t2():
     assert soil["files"]["campbell"] == "soil_campbell.npy" and manifest["root_depth"] == 0.3
 
 
+def t3():
+    """Inputs whose root depth is a field are refused: the layout records one depth."""
+    import tempfile
+
+    inputs = _inputs(with_soil=True)
+    inputs.root_depth = np.full(inputs.shape, 0.3)
+    try:
+        write_model_inputs(inputs, Path(tempfile.mkdtemp()) / "model_inputs")
+    except ValueError as err:
+        assert "field" in str(err)
+    else:
+        raise AssertionError("expected ValueError for a field of root depths")
+
+
 def t():
     t1()
     t2()
+    t3()
