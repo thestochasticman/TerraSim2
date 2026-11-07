@@ -48,6 +48,8 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
     folder = Path(folder)
     if isinstance(inputs.root_depth, np.ndarray):
         raise ValueError("model inputs on disk carry one root depth; a field of depths is set at run time from a vegetation map, not written")
+    if inputs.demand_factor is not None:
+        raise ValueError("model inputs on disk carry the reference demand; a demand factor is set at run time from a vegetation map, not written")
     folder.mkdir(parents=True, exist_ok=True)
 
     np.save(folder / "elevation.npy", inputs.grid.elevation.astype(np.float64))
@@ -182,6 +184,14 @@ def t3():
         assert "field" in str(err)
     else:
         raise AssertionError("expected ValueError for a field of root depths")
+    demanding = _inputs(with_soil=True)
+    demanding.demand_factor = np.full(demanding.shape, 1.2)
+    try:
+        write_model_inputs(demanding, Path(tempfile.mkdtemp()) / "model_inputs")
+    except ValueError as err:
+        assert "demand" in str(err)
+    else:
+        raise AssertionError("expected ValueError for a demand factor")
 
 
 def t():

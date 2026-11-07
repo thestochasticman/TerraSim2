@@ -126,6 +126,16 @@ describe("RunViewer", () => {
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
   });
 
+  it("the cover strength is 0 until set and goes into the request for any model", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "bucket", coverStrength: 0 })));
+    fireEvent.change(screen.getByLabelText("cover strength"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ coverStrength: 1 })));
+  });
+
   it("the tree root depth is null until set, goes into the request, and clears back to null", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));
