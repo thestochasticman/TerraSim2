@@ -27,9 +27,10 @@ def t():
     import tempfile
 
     from app.api.f.find_inputs import find_inputs
+    from terrasim2.k.model_inputs import ModelInputs
 
     key = read_inputs_key(find_inputs("example"))
-    assert key.startswith("v3@20"), key
+    assert key.startswith(f"v{ModelInputs.FORMAT_VERSION}@20"), key
     folder = Path(tempfile.mkdtemp()) / "model_inputs"
     folder.mkdir()
     (folder / "manifest.json").write_text(json.dumps({"version": 2, "written_at": "2000-01-01T00:00:00+00:00"}))

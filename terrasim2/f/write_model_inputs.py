@@ -27,7 +27,8 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
 
     The soil files exist only when the inputs carry soil layers, the curve
     file only when they carry a curve; the manifest's ``soil`` entry names
-    them with the layer bounds in m, ``root_depth`` (m) says what depth
+    them with the layer bounds in m and the conventions (the suctions, J
+    kg-1, the fraction was read between), ``root_depth`` (m) says what depth
     capacity.npy was computed for, and ``latitude`` (degrees) where the
     grid is, or null when the inputs do not say.
     Initial moisture is not written; a run sets it. Existing files in the
@@ -70,7 +71,8 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
             "n_tiles": inputs.soil.n_tiles,
             "textures": [str(tex) for tex in SoilTexture],
             "files": files,
-            "units": {"layer_bounds": "m", "fraction": "m3 m-3", "campbell": ["m3 m-3", "J kg-1", "dimensionless"]},
+            "conventions": {"field_capacity_suction": inputs.soil.conventions.field_capacity_suction, "wilting_point_suction": inputs.soil.conventions.wilting_point_suction},
+            "units": {"layer_bounds": "m", "fraction": "m3 m-3", "campbell": ["m3 m-3", "J kg-1", "dimensionless"], "conventions": "J kg-1"},
         }
 
     manifest = {
@@ -155,6 +157,7 @@ def t2():
     manifest = json.loads((folder / "manifest.json").read_text())
     soil = manifest["soil"]
     assert soil["layer_bounds"] == [0.0, 0.1, 0.3, 1.0] and soil["n_tiles"] == 2 and soil["textures"][0] == "sand"
+    assert soil["conventions"] == {"field_capacity_suction": -10.0, "wilting_point_suction": -500.0}
     for name in soil["files"].values():
         assert (folder / name).exists(), name
     fraction = np.load(folder / "soil_fraction.npy")

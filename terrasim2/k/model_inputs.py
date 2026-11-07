@@ -46,7 +46,7 @@ class ModelInputs:
     shape : tuple[int, int], dimensionless
     """
 
-    FORMAT_VERSION = 3
+    FORMAT_VERSION = 4
 
     def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None, latitude: float | None = None):
         if cell_map.grid is not grid:
