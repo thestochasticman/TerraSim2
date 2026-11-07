@@ -37,10 +37,16 @@ class ModelInputs:
     latitude : float, degrees, optional
         Of the grid, negative south: what the sun's path over the terrain
         is computed from. Absent for inputs that do not say where they are.
+    demand_factor : array_like, dimensionless, optional
+        What each cell's evaporative demand is relative to the reference
+        evapotranspiration, shape (rows, cols), positive: the reference
+        series is multiplied by it before every step. Absent means 1
+        everywhere. Set at run time, from a vegetation map's crop
+        coefficient; never written to disk.
 
     Attributes
     ----------
-    grid, cell_map, rain, pet, meta, soil, root_depth, latitude : as given
+    grid, cell_map, rain, pet, meta, soil, root_depth, latitude, demand_factor : as given
     dates : ndarray (T,), datetime64[D]
     n_days, n_tiles : int, dimensionless
     shape : tuple[int, int], dimensionless
@@ -48,7 +54,7 @@ class ModelInputs:
 
     FORMAT_VERSION = 4
 
-    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None, latitude: float | None = None):
+    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None, latitude: float | None = None, demand_factor: np.ndarray | None = None):
         if cell_map.grid is not grid:
             raise ValueError("cell_map must be built on grid")
         if rain.n_tiles != cell_map.n_tiles or pet.n_tiles != cell_map.n_tiles:
@@ -68,6 +74,14 @@ class ModelInputs:
         if latitude is not None and not -90 <= latitude <= 90:
             raise ValueError(f"latitude must be within [-90, 90] degrees, got {latitude}")
         self.latitude = None if latitude is None else float(latitude)
+        self.demand_factor: np.ndarray | None = None
+        if demand_factor is not None:
+            factor = np.asarray(demand_factor, dtype=np.float64)
+            if factor.shape != grid.shape:
+                raise ValueError(f"demand_factor must have the grid's shape {grid.shape}, got {factor.shape}")
+            if not (np.isfinite(factor).all() and np.all(factor > 0)):
+                raise ValueError("demand_factor must be finite and positive everywhere")
+            self.demand_factor = factor
         self.soil = soil
         self.grid = grid
         self.cell_map = cell_map
@@ -114,6 +128,16 @@ def t1():
         pass
     else:
         raise AssertionError("expected ValueError for a latitude off the globe")
+    assert m.demand_factor is None
+    demanding = ModelInputs(grid, cell_map, rain, pet, demand_factor=np.full((2, 3), 1.1))
+    assert demanding.demand_factor is not None and demanding.demand_factor.shape == (2, 3) and demanding.demand_factor.dtype == np.float64
+    for bad in (np.full((3, 2), 1.0), np.array([[1.0, 0.0, 1.0], [1.0, 1.0, 1.0]]), np.array([[1.0, np.nan, 1.0], [1.0, 1.0, 1.0]])):
+        try:
+            ModelInputs(grid, cell_map, rain, pet, demand_factor=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for a bad demand factor")
 
 
 def t2():

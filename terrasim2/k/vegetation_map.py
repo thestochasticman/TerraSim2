@@ -2,6 +2,7 @@ import numpy as np
 import numpy.typing as npt
 
 from terrasim2.f.classify_vegetation import UNKNOWN, VEGETATION_CLASSES
+from terrasim2.f.compute_crop_coefficient import compute_crop_coefficient
 
 
 class VegetationMap:
@@ -86,6 +87,20 @@ class VegetationMap:
         table = np.array(depths)
         return table[np.where(self.class_index == UNKNOWN, len(self.classes), self.class_index)]
 
+    def compute_crop_coefficient(self, **limits) -> np.ndarray:
+        """Each cell's crop coefficient from the greenness it keeps through its brownest season.
+
+        ``compute_crop_coefficient`` on the ``low`` feature, so persistent
+        cover, trees and perennials, demands more than ground that browns
+        off; ``limits`` are its keyword arguments.
+
+        Returns
+        -------
+        ndarray, dimensionless
+            Shape (rows, cols), float64; NaN where the cell was unseen.
+        """
+        return compute_crop_coefficient(self.features["low"].astype(np.float64), **limits)
+
 
 def _example() -> VegetationMap:
     return VegetationMap(
@@ -106,6 +121,10 @@ def t1():
     assert depth.dtype == np.float64 and depth.tolist() == [[0.3, 1.2, 0.5], [1.2, 1.2, 0.3]]
     unknown = VegetationMap(np.full((1, 2), -1), {"low": np.full((1, 2), np.nan), "median": np.full((1, 2), np.nan), "high": np.full((1, 2), np.nan)})
     assert np.isnan(unknown.compute_fraction("tree"))
+    kc = v.compute_crop_coefficient()
+    assert kc.shape == (2, 3) and kc.dtype == np.float64 and np.isnan(kc[0, 2])
+    assert np.isclose(kc[0, 0], 0.3 + 0.8 * (0.2 - 0.1) / 0.6) and np.isclose(kc[1, 1], 1.1), "greener keeps a higher coefficient; a low of 0.7 is a full canopy"
+    assert np.allclose(v.compute_crop_coefficient(kc_bare=1.0, kc_full=1.0)[np.isfinite(kc)], 1.0)
 
 
 def t2():
