@@ -59,7 +59,7 @@ def load_model_inputs(folder: Path, root_depth: float | np.ndarray | None = None
         grid.capacity = soil.compute_capacity(root_depth)
     else:
         root_depth = manifest.get("root_depth")
-    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil, root_depth=root_depth)
+    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil, root_depth=root_depth, latitude=manifest.get("latitude"))
 
 
 def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayers | None:
@@ -101,7 +101,7 @@ def t1():
     assert np.array_equal(back.pet.values, original.pet.values)
     assert back.rain.units == "mm" and back.pet.name == "pet"
     assert back.meta == original.meta
-    assert back.soil is None and back.root_depth is None
+    assert back.soil is None and back.root_depth is None and back.latitude is None
     try:
         load_model_inputs(folder, root_depth=0.5)
     except ValueError as err:
@@ -144,7 +144,7 @@ def t5():
     assert np.array_equal(back.soil.texture_index, original.soil.texture_index)
     assert np.allclose(back.soil.campbell, original.soil.campbell, equal_nan=True)
     assert np.all(back.grid.capacity == 80.0), "without a root depth the stored capacity stands"
-    assert back.root_depth == 0.3, "the manifest's root depth is recorded"
+    assert back.root_depth == 0.3 and back.latitude == -37.5, "the manifest's root depth and latitude are recorded"
     shallow = load_model_inputs(folder, root_depth=0.3)
     assert np.allclose(shallow.grid.capacity, [[0.035 * 300] * 3, [0.116 * 300] * 3])
     assert load_model_inputs(folder, root_depth=1.0).root_depth == 1.0
@@ -185,6 +185,7 @@ def t4():
         assert inputs.rain.values.shape == (inputs.n_days, inputs.n_tiles)
         assert inputs.soil is not None and inputs.soil.n_layers == 6, f"{folder}: expected six SLGA layers"
         assert inputs.soil.campbell is not None and inputs.root_depth == inputs.meta["root_depth"]
+        assert inputs.latitude is not None and -40 < inputs.latitude < -28, f"{folder}: the sites lie in south-eastern Australia"
         hydraulics = inputs.soil.compute_hydraulics(inputs.root_depth)
         assert hydraulics.has_conductivity and np.isfinite(hydraulics.k_sat).all(), f"{folder}: conductivity should be known everywhere"
         recomputed = inputs.soil.compute_capacity(inputs.meta["root_depth"])

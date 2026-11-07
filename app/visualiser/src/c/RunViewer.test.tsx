@@ -121,8 +121,9 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
     fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
     fireEvent.change(screen.getByLabelText("lateral multiplier"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("aspect strength"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
   });
 
   it("the tree root depth is null until set, goes into the request, and clears back to null", async () => {

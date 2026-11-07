@@ -15,7 +15,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 
 - The model assumes its inputs are already prepared. `troi_ingest` prepares them from a `Troi`; `terrasim2` consumes them. The handoff is a `ModelInputs` object: a `TerrainGrid`, a `CellToTileMap` on it, and `rain` and `pet` as `TileSeries` on the same tiles and dates, plus free-form `meta` provenance.
 - Soil comes from the Soil and Landscape Grid of Australia (SLGA) at 90 m, so it is held like SILO: a second `CellToTileMap` onto SLGA's pixels and, per pixel and depth layer, the prepared plant-available fraction and textural class (`SoilLayers`). A cell's capacity is that fraction summed over the layers the roots reach; `capacity.npy` holds it for the root depth recorded in the manifest, and `load_model_inputs(folder, root_depth)` recomputes it for another. A run sees the soil as one `SoilHydraulics` built from the layers at the inputs' root depth: capacity, and from the stored Campbell curve the saturated conductivity (book eq. 6.34) and the contents at field capacity and wilting point, all per cell.
-- On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`, now 3): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`, and when the inputs carry soil layers `soil_tile_index.npy`, `soil_fraction.npy`, `soil_texture.npy`, `soil_campbell.npy` (theta_s, psi_e, b per layer and tile) with the layer bounds and the root depth in the manifest. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
+- On disk, a `ModelInputs` is one folder in a versioned layout (`ModelInputs.FORMAT_VERSION`, now 3): `manifest.json`, `elevation.npy`, `capacity.npy`, `tile_index.npy`, `rain.csv`, `pet.csv`, and when the inputs carry soil layers `soil_tile_index.npy`, `soil_fraction.npy`, `soil_texture.npy`, `soil_campbell.npy` (theta_s, psi_e, b per layer and tile) with the layer bounds, the root depth and the latitude (degrees, the bbox's middle; what the sun's path over the terrain is computed from) in the manifest. Only NumPy and the standard library are needed to read it. `write_model_inputs` and `load_model_inputs` in `terrasim2/f/` define the layout; `load_model_inputs` refuses other versions.
 - `troi_ingest.ingest_to_disk(troi)` writes to `{troi.out_dir}/model_inputs` and skips the work when a manifest with the same version, stub, bbox and dates is already there.
 - `data/dev_sites/{stub}/model_inputs/` holds committed, prepared inputs: `example` (the lab example region, January 2024) and the six validation sites from `data/dense_sites.csv`, produced by `python -m troi_ingest.f.ingest_sites` and copied in. `terrasim2` tests that need real inputs load these; nothing in `terrasim2` ever calls `troi_ingest` or needs a store. Regenerate and re-copy when the format version or the site table changes.
 - Observations are held the same way. `troi_ingest.f.ingest_observations` reads the lab's compiled file (`~/Downloads/Dense_sites/all_sites_observations.parquet`, see `data/dense_sites.md`), locates each point on the site's window and averages a station's readings per day and depth interval; `python -m troi_ingest.f.ingest_site_observations` writes every site with observations to `{out_dir}/{stub}/observations`, copied into `data/dev_sites/{stub}/observations/` (`manifest.json` and `observations.npz`, versioned by `SiteObservations.FORMAT_VERSION`). A `SiteObservations` is cells, dates, stations, a depth interval and a volumetric content per point; `pair_run_with_observations` reads a run at each one through `compute_water_content` (`theta_wp + moisture / root depth`), and `score_pairs` gives n, bias, rmse, ubrmse, r, NSE and KGE, the scores TerraSim v1 used. Nerrigundah has no observations in the compiled file.
@@ -53,7 +53,7 @@ TerraSim2/
 │   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
-│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit), lateral_multiplier (anisotropy of the downslope drainage; 1 = matrix)
+│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit), lateral_multiplier (anisotropy of the downslope drainage; 1 = matrix), aspect_strength (demand follows solar_ratio to this power; 0 = off)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
 │   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
 │   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION; the subsurface step's flux axis
@@ -69,7 +69,7 @@ TerraSim2/
 │   │   ├── vegetation_thresholds.py # frozen dataclass: tree_low_min, tree_amplitude_max, the NDVI rule that tells trees from grass
 │   │   ├── vegetation_map.py        # what grows on each cell: class_index (0 grass, 1 tree, -1 unknown) and the NDVI low, median, high it came from; FORMAT_VERSION; compute_fraction(class), compute_root_depth(depth per class, unknown depth) -> field
 │   │   ├── site_observations.py     # point measurements of volumetric water content on a grid's cells: dates, row, col, station, depth interval, vwc, n; FORMAT_VERSION; select_day, select_layer
-│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells
+│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells, surface_slope and aspect (the ground's own tilt), solar_ratio (direct sun over a year relative to flat; needs the latitude given at construction)
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
@@ -102,6 +102,8 @@ TerraSim2/
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
 │       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       ├── compute_slope_aspect.py            # (elevation, cell size) -> the ground's tilt (radians) and the direction it faces (downslope, clockwise from north), by central differences
+│       ├── compute_solar_ratio.py             # (slope, aspect, latitude, days, hours) -> direct clear-sky sun on the tilted ground over a year relative to flat, per cell; 1 on flat ground
 │       ├── write_site_observations.py         # SiteObservations -> folder (manifest.json, observations.npz)
 │       ├── load_site_observations.py          # folder -> SiteObservations; refuses other FORMAT_VERSIONs
 │       ├── compute_water_content.py           # (moisture mm, SoilHydraulics) -> theta m3/m3 over the root depth: theta_wp + moisture / depth
@@ -153,7 +155,7 @@ TerraSim2/
 │       └── ingest_site_observations.py  # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_site_observations [stubs]`; checks the shape against the committed inputs
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, lateral_multiplier, tree_root_depth (optional), write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, lateral_multiplier, aspect_strength, tree_root_depth (optional), write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
@@ -195,7 +197,7 @@ TerraSim2/
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy and observation markers
             │   ├── ObservationMarkers.tsx     # one instanced mesh of spheres above the surface from a MarkerSet; must sit inside a Canvas
             │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity, drainage or vegetation with colourBy="capacity", "upslope" or "vegetation", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth and tree root depth fields, leak, rain-hours and lateral-multiplier fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
+            │   ├── RunViewer.tsx              # site picker, model select, root depth and tree root depth fields, leak, rain-hours, lateral-multiplier and aspect fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
             │   ├── RunViewer.module.css
             │   ├── ComparisonView.tsx         # what was paired and how the run is read, the whole-run scores, then ComparisonTable beside ScatterChart
             │   ├── ComparisonView.module.css
@@ -266,7 +268,7 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, freeCapacity?, upslopeCells?, vegetation? with vegetationClasses?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, treeRootDepth (null for the same depth everywhere), leakFraction, rainHours, lateralMultiplier
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, treeRootDepth (null for the same depth everywhere), leakFraction, rainHours, lateralMultiplier, aspectStrength
                 ├── RunStatus.ts
                 ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, drainage, leak
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order

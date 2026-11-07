@@ -62,7 +62,7 @@ def ingest(troi: Troi) -> ModelInputs:
             "capacity": "soil available water summed over layers down to root_depth",
         },
     }
-    return ModelInputs(grid, cell_map, rain, pet, meta=meta, soil=soil, root_depth=ROOT_DEPTH)
+    return ModelInputs(grid, cell_map, rain, pet, meta=meta, soil=soil, root_depth=ROOT_DEPTH, latitude=(troi.bbox[1] + troi.bbox[3]) / 2)
 
 
 def t1():
@@ -85,6 +85,7 @@ def t1():
     assert inputs.dates[0] == np.datetime64(troi.start) and inputs.dates[-1] == np.datetime64(troi.end)
     assert inputs.meta["stub"] == troi.stub and len(inputs.meta["tiles"]) == inputs.n_tiles
     assert inputs.soil is not None and inputs.meta["root_depth"] == ROOT_DEPTH == inputs.root_depth
+    assert troi.bbox[1] <= inputs.latitude <= troi.bbox[3], "the latitude is the bbox's middle"
     assert np.allclose(inputs.grid.capacity, inputs.soil.compute_capacity(ROOT_DEPTH), equal_nan=True)
     assert np.isfinite(inputs.grid.capacity).mean() > 0.9 and 5 < np.nanmean(inputs.grid.capacity) < 80
 
