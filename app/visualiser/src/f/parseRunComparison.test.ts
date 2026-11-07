@@ -39,6 +39,7 @@ describe("parseRunComparison", () => {
   it("names the first bad field", () => {
     expect(() => parseRunComparison([])).toThrow("JSON object");
     expect(() => parseRunComparison({ ...body, root_depth: 0 })).toThrow("root_depth");
+    expect(parseRunComparison({ ...body, root_depth: null }).rootDepth).toBeNull();
     expect(() => parseRunComparison({ ...body, layers: [{ top: 0.3, bottom: 0.3, n: 1 }] })).toThrow("layers[0]");
     expect(() => parseRunComparison({ ...body, by_date: [{ date: 5, t: 0, n: 1 }] })).toThrow("by_date[0]: date");
     expect(() => parseRunComparison({ ...body, by_date: [{ date: "d", t: -1, n: 1 }] })).toThrow("by_date[0]: t");

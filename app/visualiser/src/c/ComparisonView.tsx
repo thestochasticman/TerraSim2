@@ -36,7 +36,7 @@ export function ComparisonView({ comparison, pairs, day, dates, onSeek }: Compar
   return (
     <section className={styles.view} aria-label="comparison with observations">
       <p className={styles.caption}>
-        {comparison.nPaired} of {comparison.nPoints} observations paired, measured over {layers} at {comparison.stations.length} stations; the run is read as a content over its {comparison.rootDepth} m root depth, m³/m³.
+        {comparison.nPaired} of {comparison.nPoints} observations paired, measured over {layers} at {comparison.stations.length} stations; the run is read as a content over its root depth{comparison.rootDepth !== null ? ` of ${comparison.rootDepth} m` : ", which varies by cell"}, m³/m³.
       </p>
       <dl className={styles.headline} data-testid="headline">
         {headline.map(([label, value]) => (

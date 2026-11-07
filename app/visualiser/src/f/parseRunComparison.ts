@@ -14,8 +14,8 @@ export function parseRunComparison(data: unknown): RunComparison {
   const daysWritten = readCount(obj, "days_written");
   const nPoints = readCount(obj, "n_points");
   const nPaired = readCount(obj, "n_paired");
-  const rootDepth = obj["root_depth"];
-  if (typeof rootDepth !== "number" || !(rootDepth > 0)) throw new Error("root_depth must be a positive number");
+  const rootDepth = obj["root_depth"] === null || obj["root_depth"] === undefined ? null : obj["root_depth"];
+  if (rootDepth !== null && (typeof rootDepth !== "number" || !(rootDepth > 0))) throw new Error("root_depth must be a positive number or null");
 
   const layers = asArray(obj["layers"], "layers").map((item, i) => {
     const layer = asObject(item, `layers[${i}]`);

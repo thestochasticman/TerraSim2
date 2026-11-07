@@ -22,6 +22,15 @@
   min-height: 0;
 }
 
+.swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
 .message {
   margin: 0;
   padding: 1rem;

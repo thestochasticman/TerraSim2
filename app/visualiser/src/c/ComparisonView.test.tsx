@@ -30,8 +30,13 @@ describe("ComparisonView", () => {
   it("says what was paired and how the run is read, and shows the whole-run scores", () => {
     render(<ComparisonView comparison={comparison} pairs={pairs} day={3} dates={[]} onSeek={() => {}} />);
     expect(screen.getByText(/8000 of 8644 observations paired, measured over 0–0.3 m at 2 stations/)).toBeTruthy();
-    expect(screen.getByText(/0.3 m root depth/)).toBeTruthy();
+    expect(screen.getByText(/root depth of 0.3 m/)).toBeTruthy();
     expect(screen.getByTestId("headline").textContent).toBe("bias-0.190rmse0.205ubrmse0.077r0.66NSE-3.82KGE–");
+  });
+
+  it("says when the root depth varies by cell", () => {
+    render(<ComparisonView comparison={{ ...comparison, rootDepth: null }} pairs={pairs} day={null} dates={[]} />);
+    expect(screen.getByText(/root depth, which varies by cell/)).toBeTruthy();
   });
 
   it("passes the day and the seek to the table and the scatter", () => {

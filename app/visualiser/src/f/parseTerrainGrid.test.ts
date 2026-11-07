@@ -33,6 +33,15 @@ describe("parseTerrainGrid", () => {
     expect(parseTerrainGrid({ ...valid, free_capacity: null }).freeCapacity).toBeUndefined();
   });
 
+  it("reads vegetation with its class names when present, treats null as absent, and refuses an index without a name", () => {
+    const grid = parseTerrainGrid({ ...valid, vegetation: [[0, 1, -1], [1, 1, 0]], vegetation_classes: ["grass", "tree"] });
+    expect(Array.from(grid.vegetation ?? [])).toEqual([0, 1, -1, 1, 1, 0]);
+    expect(grid.vegetationClasses).toEqual(["grass", "tree"]);
+    expect(parseTerrainGrid({ ...valid, vegetation: null, vegetation_classes: null }).vegetation).toBeUndefined();
+    expect(() => parseTerrainGrid({ ...valid, vegetation: [[0, 2, 0], [0, 0, 0]], vegetation_classes: ["grass", "tree"] })).toThrow("index 2 classes");
+    expect(() => parseTerrainGrid({ ...valid, vegetation: [[0, 0, 0], [0, 0, 0]] })).toThrow("vegetation_classes");
+  });
+
   it("reads upslope cells when present, with the same layout", () => {
     const grid = parseTerrainGrid({ ...valid, upslope_cells: [[1, 1, 1], [2, 3, 6]] });
     expect(Array.from(grid.upslopeCells ?? [])).toEqual([1, 1, 1, 2, 3, 6]);

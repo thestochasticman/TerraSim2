@@ -2,6 +2,7 @@ import json
 import sys
 from pathlib import Path
 
+from app.api.f.compute_root_depth_field import compute_root_depth_field
 from app.api.k.run_request import RunRequest
 from terrasim2.f.load_model_inputs import load_model_inputs
 from terrasim2.f.run_model import run_model
@@ -67,11 +68,16 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
 
 
 def _prepare_inputs(request: RunRequest, inputs_folder: Path):
-    """Load the inputs at the request's root depth, so capacity and the soil hydraulics agree, and set the start state."""
+    """Load the inputs at the request's root depth, so capacity and the soil hydraulics agree, and set the start state.
+
+    The depth is one value, or a field by vegetation class when the request
+    names a tree depth and the site folder beside the inputs holds a map.
+    """
     inputs = load_model_inputs(inputs_folder)
     if inputs.soil is not None:
-        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
-        inputs.root_depth = request.root_depth
+        depth = compute_root_depth_field(request, (Path(inputs_folder).parents[1],))
+        inputs.grid.capacity = inputs.soil.compute_capacity(depth)
+        inputs.root_depth = depth
     inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
     return inputs
 
@@ -102,6 +108,9 @@ def t():
     sub = load_run_result(subsurface)
     assert sub.n_fluxes == 6 and zarr.open_group(subsurface, mode="r").attrs["flux_names"][3] == "leak"
     assert np.isfinite(sub.get_moisture(30)).all()
+    treed = _prepare_inputs(RunRequest(stub="tarrawarra", root_depth=0.3, tree_root_depth=1.0), find_inputs("tarrawarra"))
+    assert isinstance(treed.root_depth, np.ndarray) and set(np.unique(treed.root_depth)) == {0.3, 1.0}, "tree cells take the tree depth"
+    assert np.nanmean(treed.grid.capacity[treed.root_depth == 1.0]) > np.nanmean(treed.grid.capacity[treed.root_depth == 0.3])
     prepared = _prepare_inputs(RunRequest(stub="example", root_depth=1.0), find_inputs("example"))
     assert prepared.root_depth == 1.0, "the soil hydraulics must be built at the request's depth, not the manifest's"
     assert prepared.grid.capacity.mean() > 2 * np.load(find_inputs("example") / "capacity.npy").mean()

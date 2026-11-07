@@ -12,7 +12,7 @@ from terrasim2.f.pair_run_with_observations import pair_run_with_observations
 PAIR_COLUMNS = ("t", "row", "col", "station", "observed", "modelled")
 
 
-def read_pairs(inputs_folder: Path, observations_folder: Path, store_folder: Path, root_depth: float) -> bytes:
+def read_pairs(inputs_folder: Path, observations_folder: Path, store_folder: Path, root_depth: float | np.ndarray) -> bytes:
     """Every observation with the run's value at it, as little-endian float32 columns.
 
     The layout is ``PAIR_COLUMNS`` one after another, each of length N, so
@@ -25,7 +25,8 @@ def read_pairs(inputs_folder: Path, observations_folder: Path, store_folder: Pat
     ----------
     inputs_folder, observations_folder, store_folder : Path
         As for ``read_comparison``.
-    root_depth : float, m
+    root_depth : float or ndarray, m
+        One value or a field.
 
     Returns
     -------

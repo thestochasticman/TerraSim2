@@ -14,6 +14,9 @@
  *     Pore space above field capacity per cell at the run's root depth; present when the inputs carry a soil curve.
  * upslopeCells : Float64Array of length rows * cols, dimensionless, optional
  *     How many cells drain through each cell, itself included; absent for a bare terrain file.
+ * vegetation : Float64Array of length rows * cols, dimensionless, optional
+ *     The vegetation class index per cell, -1 where unknown; present when the site has a vegetation map.
+ * vegetationClasses : the names the indices stand for, present with vegetation.
  */
 export type TerrainGrid = {
   rows: number;
@@ -23,4 +26,6 @@ export type TerrainGrid = {
   capacity?: Float64Array;
   freeCapacity?: Float64Array;
   upslopeCells?: Float64Array;
+  vegetation?: Float64Array;
+  vegetationClasses?: string[];
 };
