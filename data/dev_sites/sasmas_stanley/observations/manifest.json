@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "rows": 132,
+  "cols": 223,
+  "n_points": 8936,
+  "stations": [
+    "SASMAS_S1",
+    "SASMAS_S2",
+    "SASMAS_S3",
+    "SASMAS_S4",
+    "SASMAS_S5",
+    "SASMAS_S6",
+    "SASMAS_S7"
+  ],
+  "start": "2003-01-10",
+  "end": "2006-12-31",
+  "n_dates": 1452,
+  "file": "observations.npz",
+  "columns": {
+    "dates": {
+      "units": "datetime64[D]"
+    },
+    "row": {
+      "units": "dimensionless"
+    },
+    "col": {
+      "units": "dimensionless"
+    },
+    "station": {
+      "units": "index into stations"
+    },
+    "depth_top": {
+      "units": "m"
+    },
+    "depth_bottom": {
+      "units": "m"
+    },
+    "vwc": {
+      "units": "m3 m-3"
+    },
+    "n": {
+      "units": "readings averaged"
+    }
+  },
+  "written_at": "2026-11-06T21:25:13+00:00",
+  "meta": {
+    "stub": "sasmas_stanley",
+    "source": "/home/yasar/Downloads/Dense_sites/all_sites_observations.parquet",
+    "sources": [
+      "sasmas"
+    ],
+    "n_rows_read": 31978,
+    "n_outside_window": 23042,
+    "n_outside_dates": 0,
+    "n_invalid": 0,
+    "n_readings": 638567
+  }
+}

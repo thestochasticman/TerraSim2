@@ -3,13 +3,18 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
+import { ComparisonView } from "@/c/ComparisonView";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
+import { buildObservationMarkers } from "@/f/buildObservationMarkers";
+import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
 import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
+import { useRunComparison } from "@/h/useRunComparison";
 import { useRunSeries } from "@/h/useRunSeries";
 import type { ColourBy } from "@/t/ColourBy";
+import type { MarkerMode } from "@/t/MarkerMode";
 import type { RunRequest } from "@/t/RunRequest";
 import styles from "./RunViewer.module.css";
 
@@ -25,6 +30,10 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  * the scrubber is a progress bar. When it completes, the scrubber unlocks:
  * play, pause and a day slider, each day fetched once and cached. The
  * series chart below grows with the run and marks the day on screen.
+ *
+ * When the site has observations, the day's points sit on the terrain as
+ * markers coloured by what was observed or by the run's error there, and
+ * the comparison below the chart scores the run against them.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
@@ -39,10 +48,12 @@ export function RunViewer() {
   const complete = status?.status === "complete";
   const playback = usePlayback(status?.nDays ?? 0, complete);
   const { series, error: seriesError } = useRunSeries(status?.runId ?? null, status?.daysWritten ?? 0);
+  const { comparison, pairs, error: comparisonError } = useRunComparison(status?.runId ?? null, status?.daysWritten ?? 0);
   const [scrubbed, setScrubbed] = useState<{ runId: string; t: number; moisture: Float32Array } | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
   const [colourBy, setColourBy] = useState<ColourBy>("moisture");
-  const error = runError ?? sitesError ?? seriesError ?? scrubError;
+  const [markerMode, setMarkerMode] = useState<MarkerMode>("observed");
+  const error = runError ?? sitesError ?? seriesError ?? comparisonError ?? scrubError;
 
   useEffect(() => {
     fetchSites()
@@ -82,6 +93,8 @@ export function RunViewer() {
     if (!terrain?.capacity || !terrain.freeCapacity || request?.step !== "subsurface") return undefined;
     return terrain.capacity.map((c, i) => c + (terrain.freeCapacity?.[i] ?? 0));
   }, [terrain, request]);
+  const ranges = useMemo(() => (pairs ? computeComparisonRanges(pairs) : null), [pairs]);
+  const markers = useMemo(() => (terrain && pairs && ranges && shown ? buildObservationMarkers(terrain, pairs, shown.t, markerMode, ranges) : null), [terrain, pairs, ranges, shown, markerMode]);
 
   return (
     <div className={styles.viewer}>
@@ -149,6 +162,26 @@ export function RunViewer() {
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
           </span>
         )}
+        {comparison && (
+          <label>
+            observations{" "}
+            <select value={markerMode} onChange={(e) => setMarkerMode(e.target.value as MarkerMode)} aria-label="observations">
+              <option value="none">hidden</option>
+              <option value="observed">observed content</option>
+              <option value="error">model minus observed</option>
+            </select>
+          </label>
+        )}
+        {comparison && markerMode === "observed" && ranges?.observed && (
+          <span data-testid="observed-legend">
+            observed {ranges.observed.min.toFixed(2)} to {ranges.observed.max.toFixed(2)} m³/m³, light to dark
+          </span>
+        )}
+        {comparison && markerMode === "error" && ranges?.errorScale && (
+          <span data-testid="error-legend">
+            red where the model is drier, blue where wetter, full at {ranges.errorScale.toFixed(2)} m³/m³
+          </span>
+        )}
       </div>
       {status && status.daysWritten > 0 && (
         <DayScrubber
@@ -162,8 +195,9 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
+      {comparison && pairs && status && <ComparisonView comparison={comparison} pairs={pairs} day={shown?.t ?? null} dates={status.dates} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );
 }

@@ -1,0 +1,42 @@
+.scroll {
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  text-align: right;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
+.table th {
+  font-weight: normal;
+  color: #888;
+  position: sticky;
+  top: 0;
+  background: var(--background);
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
+
+.overall td {
+  font-weight: 600;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.4);
+}
+
+.seekable {
+  cursor: pointer;
+}
+
+.table tbody tr[data-highlighted="true"] {
+  background: rgba(127, 127, 127, 0.18);
+}
