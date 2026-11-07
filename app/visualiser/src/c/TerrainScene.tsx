@@ -3,9 +3,11 @@
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useMemo } from "react";
+import { ObservationMarkers } from "@/c/ObservationMarkers";
 import { TerrainSurface } from "@/c/TerrainSurface";
 import { frameTerrainCamera } from "@/f/frameTerrainCamera";
 import type { ColourBy } from "@/t/ColourBy";
+import type { MarkerSet } from "@/t/MarkerSet";
 import type { TerrainGrid } from "@/t/TerrainGrid";
 
 export type TerrainSceneProps = {
@@ -16,6 +18,8 @@ export type TerrainSceneProps = {
   colourBy?: ColourBy;
   /** What moisture is a fraction of, per cell, mm; passed to TerrainSurface. */
   fullCapacity?: Float64Array;
+  /** Observation markers to draw above the surface, if any. */
+  markers?: MarkerSet;
 };
 
 /**
@@ -24,7 +28,7 @@ export type TerrainSceneProps = {
  *
  * Needs a browser with WebGL. Load it only on the client.
  */
-export function TerrainScene({ grid, moisture, colourBy, fullCapacity }: TerrainSceneProps) {
+export function TerrainScene({ grid, moisture, colourBy, fullCapacity, markers }: TerrainSceneProps) {
   const frame = useMemo(() => frameTerrainCamera(grid), [grid]);
   const lightDistance = frame.far / 10;
 
@@ -33,6 +37,7 @@ export function TerrainScene({ grid, moisture, colourBy, fullCapacity }: Terrain
       <ambientLight intensity={0.5} />
       <directionalLight position={[lightDistance, lightDistance, lightDistance / 2]} intensity={1.2} />
       <TerrainSurface grid={grid} moisture={moisture} colourBy={colourBy} fullCapacity={fullCapacity} />
+      {markers && markers.count > 0 && <ObservationMarkers markers={markers} />}
       <OrbitControls target={frame.target} />
     </Canvas>
   );

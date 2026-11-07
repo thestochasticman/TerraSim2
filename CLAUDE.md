@@ -24,7 +24,7 @@ Process-based soil moisture modelling on terrain, with a React app for visualisi
 
 - A run's histories go to a zarr store when `run_model` is given a folder: `moisture` (T, rows, cols) and `fluxes` (T, n_fluxes, rows, cols), float64, chunked per `RunStoreParams`, written in blocks of `write_every_days`. The store's attributes carry `dates`, `days_written` (leading days safe to read while the run is going), `complete` and `flux_names` (what each index of the flux axis is, so readers need not know the step). `load_run_result` opens it read-only; `RunResult` never copies the arrays.
 - `app/api` is the service the visualiser talks to. A `RunRequest` (site stub plus model and store settings, including the root depth) and the inputs' write time hash to a run id; the same request on the same inputs is the same run, and a complete store is served without rerunning. Runs execute as a separate process (`execute_run`) so the service stays responsive. Readers never go past `days_written`.
-- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified), `GET /soils/column` (one layered column's available water; query `textures`, `root_depth`, `model`). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
+- Routes: `GET /sites`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/terrain`, `GET /runs/{id}/moisture/{t}` (float32 bytes), `GET /runs/{id}/series`, `GET /runs/{id}/comparison` (scores against the site's observations, overall, per survey date and per station; 404 for a site without observations), `GET /runs/{id}/pairs` (every observation with the run's value at it, six float32 columns), `GET /soils/retention` (the book's retention curves per texture), `GET /soils/texture` (the USDA triangle on a grid, classified), `GET /soils/column` (one layered column's available water; query `textures`, `root_depth`, `model`). Start it with `python -m app.api.f.serve [port]` from the repo root in the `borevitz_lab` environment.
 
 ## Python structure
 
@@ -153,6 +153,9 @@ TerraSim2/
     │       ├── read_moisture_day.py # store, t -> float32 bytes; refuses days not yet written
     │       ├── read_terrain.py     # (model_inputs, root_depth) -> elevation, capacity and free capacity at that root depth and upslope cell counts (via TerrainDerivatives) in the visualiser's JSON shape
     │       ├── read_series.py      # grid-mean daily rain, pet, moisture and the fluxes named in the store for the days written
+    │       ├── find_observations.py # stub -> observations folder, searching the same roots as find_inputs
+    │       ├── read_comparison.py  # (model_inputs, observations, store, root_depth) -> scores overall, by date (with the run's day index) and by station, layers, stations; NaN as null
+    │       ├── read_pairs.py       # the same pairing as float32 bytes: t, row, col, station, observed, modelled columns
     │       ├── compute_retention_curves.py # both book curves for the 12 textures over a log suction grid, with theta at FC and WP and mm per m
     │       ├── compute_texture_triangle.py # the triangle on a 1 percent grid: class, d_g, estimated psi_e and b per point, plus table 2.4's typical soils
     │       ├── compute_soil_column.py      # (6 textures, root depth, model) -> per-layer fraction, thickness in roots and mm on SLGA's depth intervals, plus the total
@@ -166,7 +169,7 @@ TerraSim2/
         ├── public/terrain/sample.json         # synthetic 40x40 hill; replaced by Python output later
         └── src/
             ├── api/                           # the only place fetch is called; one wrapper per route, tests in api.test.ts
-            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts, fetchRetentionCurves.ts, fetchTextureTriangle.ts, fetchSoilColumn.ts
+            │   ├── fetchSites.ts, startRun.ts, fetchRunStatus.ts, fetchTerrain.ts, fetchMoistureDay.ts, fetchRunSeries.ts, fetchRunComparison.ts, fetchRunPairs.ts (null on 404), fetchRetentionCurves.ts, fetchTextureTriangle.ts, fetchSoilColumn.ts
             ├── app/
             │   ├── layout.tsx                 # root html, fonts, metadata
             │   ├── page.tsx                   # renders <TerrainViewer url="/terrain/sample.json" />
@@ -176,10 +179,17 @@ TerraSim2/
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
-            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture and colourBy
+            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy and observation markers
+            │   ├── ObservationMarkers.tsx     # one instanced mesh of spheres above the surface from a MarkerSet; must sit inside a Canvas
             │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity or drainage with colourBy="capacity" or "upslope", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete
+            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
             │   ├── RunViewer.module.css
+            │   ├── ComparisonView.tsx         # what was paired and how the run is read, the whole-run scores, then ComparisonTable beside ScatterChart
+            │   ├── ComparisonView.module.css
+            │   ├── ComparisonTable.tsx        # the whole run then a row per survey date: n, observed and modelled means, bias, rmse, r; the shown day's row highlighted, click to seek
+            │   ├── ComparisonTable.module.css
+            │   ├── ScatterChart.tsx           # visx: modelled against observed with the 1:1 line; the shown day in full, the rest faded; thinned past MAX_POINTS; hover reads a point
+            │   ├── ScatterChart.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
             │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff + drainage + leak stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
@@ -221,6 +231,13 @@ TerraSim2/
             │   ├── projectTernary.ts          # (sand, silt, clay) -> {x, y} in a unit triangle: sand at (0, 0), silt at (1, 0), clay at the apex
             │   ├── invertTernary.ts           # {x, y} -> fractions; negative outside the triangle
             │   ├── parseSoilColumn.ts         # service column JSON -> SoilColumn; one layer per bound interval
+            │   ├── parseScores.ts             # snake_case score fields -> Scores, finite numbers or null
+            │   ├── parseRunComparison.ts      # service comparison JSON -> RunComparison
+            │   ├── decodeRunPairs.ts          # float32 bytes, six columns -> RunPairs
+            │   ├── mapErrorToColour.ts        # modelled minus observed over ±scale -> RGB on the diverging ramp: red dry, grey zero, blue wet; NaN -> grey
+            │   ├── selectPairsOnDay.ts        # (pairs, t) -> indices observed on that day
+            │   ├── computeComparisonRanges.ts # pairs -> the observed {min, max} and the largest |error|, the marker colour scales fixed over the run
+            │   ├── buildObservationMarkers.ts # (grid, pairs, t, mode, ranges) -> MarkerSet: a sphere per observation of the day at its cell, lifted above the surface, coloured by mode
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
@@ -230,7 +247,8 @@ TerraSim2/
             │   ├── useRetentionCurves.ts      # fetch the book's curves once on mount
             │   ├── useColourScheme.ts         # "light" | "dark" from prefers-color-scheme, following changes; light on the server
             │   ├── useTextureTriangle.ts      # fetch the classified triangle once on mount
-            │   └── useSoilColumn.ts           # refetch a column as its textures, root depth or model change; keeps the last column on a failure
+            │   ├── useSoilColumn.ts           # refetch a column as its textures, root depth or model change; keeps the last column on a failure
+            │   └── useRunComparison.ts        # the run's comparison and pairs, refetched as days are written; both null for a site without observations
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, freeCapacity?, upslopeCells?
                 ├── TerrainMesh.ts
@@ -243,7 +261,12 @@ TerraSim2/
                 ├── ColourScheme.ts            # "light" | "dark"
                 ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope": what the terrain surface's colour encodes
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
-                └── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
+                ├── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
+                ├── Scores.ts                  # n, observedMean, modelledMean, bias, rmse, ubrmse, r, nse, kge; null where unscorable
+                ├── RunComparison.ts           # daysWritten, nPoints, nPaired, rootDepth, layers, stations, overall, byDate (date, t), byStation
+                ├── RunPairs.ts                # parallel Float32Array columns: t, row, col, station, observed, modelled
+                ├── MarkerSet.ts               # count, positions (3 per marker, m), colours (RGB per marker), radius (m)
+                └── MarkerMode.ts              # "none" | "observed" | "error": what the observation markers encode
 ```
 
 ### Tests
