@@ -49,7 +49,7 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
     inputs = _prepare_inputs(request, inputs_folder)
     step, flux_enum = STEPS[request.step]
     if request.step == "subsurface":
-        params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, leak_fraction=request.leak_fraction, rain_hours=request.rain_hours, lateral_multiplier=request.lateral_multiplier)
+        params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, leak_fraction=request.leak_fraction, rain_hours=request.rain_hours, lateral_multiplier=request.lateral_multiplier, aspect_strength=request.aspect_strength)
     else:
         params = BucketModelParams(stress_exponent=request.stress_exponent)
     run_model(

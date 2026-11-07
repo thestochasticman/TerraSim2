@@ -34,10 +34,13 @@ class ModelInputs:
         The root depth ``grid.capacity`` was computed for, when soil is
         present: one value, or a field of the grid's shape where roots
         vary by cell. A run derives its soil hydraulics at this depth.
+    latitude : float, degrees, optional
+        Of the grid, negative south: what the sun's path over the terrain
+        is computed from. Absent for inputs that do not say where they are.
 
     Attributes
     ----------
-    grid, cell_map, rain, pet, meta, soil, root_depth : as given
+    grid, cell_map, rain, pet, meta, soil, root_depth, latitude : as given
     dates : ndarray (T,), datetime64[D]
     n_days, n_tiles : int, dimensionless
     shape : tuple[int, int], dimensionless
@@ -45,7 +48,7 @@ class ModelInputs:
 
     FORMAT_VERSION = 3
 
-    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None):
+    def __init__(self, grid: TerrainGrid, cell_map: CellToTileMap, rain: TileSeries, pet: TileSeries, meta: dict | None = None, soil: SoilLayers | None = None, root_depth: float | np.ndarray | None = None, latitude: float | None = None):
         if cell_map.grid is not grid:
             raise ValueError("cell_map must be built on grid")
         if rain.n_tiles != cell_map.n_tiles or pet.n_tiles != cell_map.n_tiles:
@@ -62,6 +65,9 @@ class ModelInputs:
             if not np.all(depth > 0):
                 raise ValueError("root_depth must be positive")
             self.root_depth = float(depth) if depth.ndim == 0 else depth
+        if latitude is not None and not -90 <= latitude <= 90:
+            raise ValueError(f"latitude must be within [-90, 90] degrees, got {latitude}")
+        self.latitude = None if latitude is None else float(latitude)
         self.soil = soil
         self.grid = grid
         self.cell_map = cell_map
@@ -100,7 +106,14 @@ def t1():
     m = ModelInputs(grid, cell_map, rain, pet, meta={"stub": "x"})
     assert m.shape == (2, 3) and m.n_tiles == 2 and m.n_days == 2
     assert m.dates[0] == np.datetime64("2024-01-01") and m.meta == {"stub": "x"}
-    assert ModelInputs(grid, cell_map, rain, pet).meta == {}
+    assert ModelInputs(grid, cell_map, rain, pet).meta == {} and m.latitude is None
+    assert ModelInputs(grid, cell_map, rain, pet, latitude=-37.5).latitude == -37.5
+    try:
+        ModelInputs(grid, cell_map, rain, pet, latitude=-91.0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for a latitude off the globe")
 
 
 def t2():

@@ -19,6 +19,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
       leak_fraction: request.leakFraction,
       rain_hours: request.rainHours,
       lateral_multiplier: request.lateralMultiplier,
+      aspect_strength: request.aspectStrength,
       write_every_days: request.writeEveryDays,
       record_fluxes: request.recordFluxes,
     }),

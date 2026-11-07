@@ -63,7 +63,7 @@ def run_model(
         Dates, moisture at the end of every day, and every day's fluxes if recorded.
     """
     grid = inputs.grid
-    derivatives = TerrainDerivatives(grid)
+    derivatives = TerrainDerivatives(grid, inputs.latitude)
     hydraulics = _build_hydraulics(inputs)
     record_fluxes = store_params.record_fluxes
 

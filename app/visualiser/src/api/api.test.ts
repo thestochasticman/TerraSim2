@@ -34,11 +34,11 @@ describe("api wrappers", () => {
 
   it("startRun posts snake_case fields and returns id and status", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ run_id: "tarrawarra-abc", status: "running" }));
-    const out = await startRun({ stub: "tarrawarra", step: "routed", stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, treeRootDepth: 1.5, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, writeEveryDays: 1, recordFluxes: true });
+    const out = await startRun({ stub: "tarrawarra", step: "routed", stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, treeRootDepth: 1.5, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0.5, writeEveryDays: 1, recordFluxes: true });
     expect(out).toEqual({ runId: "tarrawarra-abc", status: "running" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/runs");
-    expect(JSON.parse(String(init?.body))).toEqual({ stub: "tarrawarra", step: "routed", stress_exponent: 1, initial_fullness: 0.5, root_depth: 0.3, tree_root_depth: 1.5, leak_fraction: 0, rain_hours: 24, lateral_multiplier: 1, write_every_days: 1, record_fluxes: true });
+    expect(JSON.parse(String(init?.body))).toEqual({ stub: "tarrawarra", step: "routed", stress_exponent: 1, initial_fullness: 0.5, root_depth: 0.3, tree_root_depth: 1.5, leak_fraction: 0, rain_hours: 24, lateral_multiplier: 1, aspect_strength: 0.5, write_every_days: 1, record_fluxes: true });
   });
 
   it("fetchRunStatus, fetchTerrain and fetchRunSeries parse their bodies", async () => {
@@ -122,6 +122,6 @@ describe("api wrappers", () => {
     await expect(fetchRunStatus("x")).rejects.toThrow("500");
     await expect(fetchTerrain("x")).rejects.toThrow("500");
     await expect(fetchRunSeries("x")).rejects.toThrow("500");
-    await expect(startRun({ stub: "x", step: "bucket", stressExponent: 1, initialFullness: 0, rootDepth: 0.3, treeRootDepth: null, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, writeEveryDays: 1, recordFluxes: false })).rejects.toThrow("500");
+    await expect(startRun({ stub: "x", step: "bucket", stressExponent: 1, initialFullness: 0, rootDepth: 0.3, treeRootDepth: null, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0, writeEveryDays: 1, recordFluxes: false })).rejects.toThrow("500");
   });
 });
