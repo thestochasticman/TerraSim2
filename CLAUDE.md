@@ -52,7 +52,7 @@ TerraSim2/
 │   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
-│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit)
+│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit), lateral_multiplier (anisotropy of the downslope drainage; 1 = matrix)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
 │   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
 │   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION; the subsurface step's flux axis
@@ -142,7 +142,7 @@ TerraSim2/
 │       └── ingest_site_observations.py  # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_site_observations [stubs]`; checks the shape against the committed inputs
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, lateral_multiplier, write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
@@ -182,7 +182,7 @@ TerraSim2/
             │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy and observation markers
             │   ├── ObservationMarkers.tsx     # one instanced mesh of spheres above the surface from a MarkerSet; must sit inside a Canvas
             │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity or drainage with colourBy="capacity" or "upslope", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak and rain-hours fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
+            │   ├── RunViewer.tsx              # site picker, model select, root depth field, leak, rain-hours and lateral-multiplier fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
             │   ├── RunViewer.module.css
             │   ├── ComparisonView.tsx         # what was paired and how the run is read, the whole-run scores, then ComparisonTable beside ScatterChart
             │   ├── ComparisonView.module.css
@@ -252,7 +252,7 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, freeCapacity?, upslopeCells?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, leakFraction, rainHours
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, leakFraction, rainHours, lateralMultiplier
                 ├── RunStatus.ts
                 ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, drainage, leak
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order

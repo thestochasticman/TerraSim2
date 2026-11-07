@@ -34,10 +34,13 @@ def step_subsurface_bucket_model(
        as the driver (the kinematic approximation), at Campbell's
        conductivity for the cell's content::
 
-           drainage = K(theta) * g * slope * root_depth / cell_size * seconds_per_day
+           drainage = lateral_multiplier * K(theta) * g * slope * root_depth / cell_size * seconds_per_day
 
        and leaks straight down at ``K(theta) * g * leak_fraction``.
-       Both are taken from the start-of-day state and capped at the free
+       ``lateral_multiplier`` is the anisotropy of a real hillslope, where
+       macropores and layer boundaries carry water along the slope many
+       times faster than the matrix does; 1 is the matrix value. Both
+       fluxes are taken from the start-of-day state and capped at the free
        water. The flow width is taken as one cell size whatever the
        direction; a diagonal neighbour's slope already uses the longer
        distance, so this overstates diagonal flow by at most sqrt(2).
@@ -89,7 +92,7 @@ def step_subsurface_bucket_model(
     free = np.maximum(total - capacity, 0.0)
     theta = soil_hydraulics.theta_fc + free / depth_mm
     conductivity = compute_campbell_conductivity(np.nan_to_num(theta), np.nan_to_num(soil_hydraulics.theta_s, nan=1.0), np.nan_to_num(soil_hydraulics.b, nan=1.0), np.nan_to_num(soil_hydraulics.k_sat))
-    drainage = np.minimum(conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
+    drainage = np.minimum(params.lateral_multiplier * conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
     leak = np.minimum(conductivity * GRAVITY * params.leak_fraction * SECONDS_PER_DAY, free - drainage)
     total = (total - drainage - leak).ravel()
 
@@ -233,6 +236,20 @@ def t5():
 
 
 def t6():
+    """The lateral multiplier scales the downslope drainage alone: ten times the matrix value passes ten times
+    the water, the leak is untouched, and the free store still caps what can leave."""
+    h = _hydraulics((1, 3))
+    d = _derivatives([[2.0, 1.0, 0.0]])
+    rain = np.zeros((1, 3))
+    _, matrix = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01))
+    _, fast = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01, lateral_multiplier=10.0))
+    assert np.allclose(fast[F.DRAINAGE][0, :2], 10.0 * matrix[F.DRAINAGE][0, :2])
+    assert np.allclose(fast[F.LEAK], matrix[F.LEAK])
+    _, capped = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(lateral_multiplier=1000.0))
+    assert np.allclose(capped[F.DRAINAGE][0, :2], 60.0), "no more than the free store"
+
+
+def t7():
     """Hydraulics without conductivity are refused with a message naming the step."""
     try:
         step_subsurface_bucket_model(np.zeros((1, 3)), SoilHydraulics(np.full((1, 3), 30.0)), np.zeros((1, 3)), np.zeros((1, 3)), _derivatives([[2.0, 1.0, 0.0]]), SubsurfaceBucketParams())
@@ -249,3 +266,4 @@ def t():
     t4()
     t5()
     t6()
+    t7()

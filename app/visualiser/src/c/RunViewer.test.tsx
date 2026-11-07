@@ -120,8 +120,9 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
     fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
     fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("lateral multiplier"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30 })));
   });
 
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {

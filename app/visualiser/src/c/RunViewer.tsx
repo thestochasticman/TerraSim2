@@ -43,6 +43,7 @@ export function RunViewer() {
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
   const [leakFraction, setLeakFraction] = useState(0);
   const [rainHours, setRainHours] = useState(24);
+  const [lateralMultiplier, setLateralMultiplier] = useState(1);
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
@@ -78,7 +79,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, leakFraction, rainHours, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, leakFraction, rainHours, lateralMultiplier, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -126,6 +127,10 @@ export function RunViewer() {
             <label>
               rain hours{" "}
               <input type="number" min={0.5} max={24} step={0.5} value={rainHours} onChange={(e) => setRainHours(Number(e.target.value))} aria-label="rain hours" className={styles.depth} />
+            </label>
+            <label>
+              lateral ×{" "}
+              <input type="number" min={1} max={1000} step={1} value={lateralMultiplier} onChange={(e) => setLateralMultiplier(Number(e.target.value))} aria-label="lateral multiplier" className={styles.depth} />
             </label>
           </>
         )}
