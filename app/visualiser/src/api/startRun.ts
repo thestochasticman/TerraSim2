@@ -15,6 +15,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
       stress_exponent: request.stressExponent,
       initial_fullness: request.initialFullness,
       root_depth: request.rootDepth,
+      tree_root_depth: request.treeRootDepth,
       leak_fraction: request.leakFraction,
       rain_hours: request.rainHours,
       lateral_multiplier: request.lateralMultiplier,

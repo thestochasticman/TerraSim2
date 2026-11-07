@@ -102,7 +102,7 @@ class SoilLayers:
         on_cells = np.stack([self.cell_map.spread_to_cells(layer) for layer in self.available_fraction])
         return compute_capacity_map(on_cells, self.layer_bounds, root_depth)
 
-    def compute_hydraulics(self, root_depth: float) -> SoilHydraulics:
+    def compute_hydraulics(self, root_depth: npt.ArrayLike) -> SoilHydraulics:
         """Each cell's soil over the root depth, as one set of arrays for a step.
 
         The curve parameters of the layers the roots reach are averaged,
@@ -114,8 +114,9 @@ class SoilLayers:
 
         Parameters
         ----------
-        root_depth : float, m
-            Positive.
+        root_depth : float or array_like, m
+            Positive; one value, or a field of the terrain's shape where
+            roots vary by cell, as under trees and grass.
 
         Returns
         -------
@@ -123,18 +124,29 @@ class SoilLayers:
             With conductivity fields when the layers carry a curve, else
             capacity only. NaN per cell where a reached layer is unknown.
         """
-        if not root_depth > 0:
+        depth = np.asarray(root_depth, dtype=np.float64)
+        if depth.ndim not in (0, 2) or (depth.ndim == 2 and depth.shape != self.shape):
+            raise ValueError(f"root_depth must be one value or a field of shape {self.shape}")
+        if not np.all(depth > 0):
             raise ValueError("root_depth must be positive")
-        capacity = self.compute_capacity(root_depth)
+        capacity = self.compute_capacity(depth)
         if self.campbell is None:
             return SoilHydraulics(capacity, root_depth)
-        thickness = compute_layer_thickness_in_depth(self.layer_bounds, root_depth)
-        weights = thickness / thickness.sum()
-        mean = np.einsum("l,pln->pn", weights, self.campbell)
-        reached = weights > 0
-        unknown = ~np.isfinite(self.campbell[:, reached]).all(axis=(0, 1))
-        mean[:, unknown] = np.nan
-        theta_s, psi_e, b = (self.cell_map.spread_to_cells(row) for row in mean)
+        thickness = compute_layer_thickness_in_depth(self.layer_bounds, depth)
+        if thickness.ndim == 1:
+            weights = thickness / thickness.sum()
+            mean = np.einsum("l,pln->pn", weights, self.campbell)
+            reached = weights > 0
+            unknown = ~np.isfinite(self.campbell[:, reached]).all(axis=(0, 1))
+            mean[:, unknown] = np.nan
+            theta_s, psi_e, b = (self.cell_map.spread_to_cells(row) for row in mean)
+        else:
+            weights = thickness / thickness.sum(axis=0)
+            on_cells = self.campbell[:, :, self.cell_map.tile_index]
+            mean = np.einsum("lrc,plrc->prc", weights, on_cells)
+            unknown = (~np.isfinite(on_cells) & (weights > 0)[None]).any(axis=(0, 1))
+            mean[:, unknown] = np.nan
+            theta_s, psi_e, b = mean
         known = np.isfinite(theta_s) & np.isfinite(psi_e) & np.isfinite(b)
         k_sat = np.full(self.shape, np.nan)
         theta_fc = np.full(self.shape, np.nan)
@@ -251,8 +263,32 @@ def t4():
             raise AssertionError("expected ValueError")
 
 
+def t5():
+    """A field of root depths gives each cell the hydraulics the scalar depth would, cell by cell; a field of the
+    wrong shape is refused."""
+    soil = _fixture(with_curve=True)
+    field = np.array([[0.3, 0.3, 1.0], [1.0, 0.3, 0.3]])
+    varied = soil.compute_hydraulics(field)
+    shallow = soil.compute_hydraulics(0.3)
+    deep = soil.compute_hydraulics(1.0)
+    assert isinstance(varied.root_depth, np.ndarray) and np.array_equal(varied.root_depth, field)
+    for name in ("capacity", "k_sat", "b", "theta_s", "theta_fc", "theta_wp"):
+        expected = np.where(field == 0.3, getattr(shallow, name), getattr(deep, name))
+        assert np.allclose(getattr(varied, name), expected, equal_nan=True), name
+    assert varied.capacity[0, 2] > varied.capacity[0, 0], "deeper roots over the same column hold more"
+    assert varied.b[0, 2] != varied.b[0, 0], "the clay the deep roots reach changes the curve"
+    for bad in (np.full((3, 2), 0.3), np.array([[0.3, 0.3, 0.0], [0.3, 0.3, 0.3]])):
+        try:
+            soil.compute_hydraulics(bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for a bad field")
+
+
 def t():
     t1()
     t2()
     t3()
     t4()
+    t5()

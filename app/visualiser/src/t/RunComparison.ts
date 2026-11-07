@@ -6,7 +6,7 @@ import type { Scores } from "@/t/Scores";
  * daysWritten : dimensionless
  * nPoints : dimensionless, observations at the site
  * nPaired : dimensionless, observations the run has a value for so far
- * rootDepth : metres (m), the depth the run's stored water is read over
+ * rootDepth : metres (m), the depth the run's stored water is read over; null when it varies by cell
  * layers : the depth intervals observed, metres (m), with how many observations each has
  * stations : the station names, indexed by the pairs' station column
  * overall : scores over every paired observation
@@ -17,7 +17,7 @@ export type RunComparison = {
   daysWritten: number;
   nPoints: number;
   nPaired: number;
-  rootDepth: number;
+  rootDepth: number | null;
   layers: { top: number; bottom: number; n: number }[];
   stations: string[];
   overall: Scores;

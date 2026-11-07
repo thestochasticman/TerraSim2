@@ -9,6 +9,7 @@ import { SeriesChart } from "@/c/SeriesChart";
 import { buildObservationMarkers } from "@/f/buildObservationMarkers";
 import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
+import { VEGETATION_COLOURS } from "@/f/computeVegetationColours";
 import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
 import { useRunComparison } from "@/h/useRunComparison";
@@ -40,6 +41,7 @@ export function RunViewer() {
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [stub, setStub] = useState<string>("");
   const [rootDepth, setRootDepth] = useState(0.3);
+  const [treeRootDepth, setTreeRootDepth] = useState<number | null>(null);
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
   const [leakFraction, setLeakFraction] = useState(0);
   const [rainHours, setRainHours] = useState(24);
@@ -79,7 +81,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, leakFraction, rainHours, lateralMultiplier, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -138,6 +140,10 @@ export function RunViewer() {
           root depth, m{" "}
           <input type="number" min={0.05} max={2} step={0.05} value={rootDepth} onChange={(e) => setRootDepth(Number(e.target.value))} aria-label="root depth" className={styles.depth} />
         </label>
+        <label title="where the site has a vegetation map, tree cells reach this deep; blank for the same depth everywhere">
+          tree roots, m{" "}
+          <input type="number" min={0.05} max={3} step={0.05} value={treeRootDepth ?? ""} placeholder="same" onChange={(e) => setTreeRootDepth(e.target.value === "" ? null : Number(e.target.value))} aria-label="tree root depth" className={styles.depth} />
+        </label>
         <button type="button" onClick={start} disabled={!stub || !(rootDepth > 0)}>
           run
         </button>
@@ -150,8 +156,21 @@ export function RunViewer() {
             <option value="relative">moisture, stretched over the day</option>
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
+            {terrain?.vegetation && <option value="vegetation">vegetation, tree or grass</option>}
           </select>
         </label>
+        {colourBy === "vegetation" && terrain?.vegetationClasses && (
+          <span data-testid="vegetation-legend">
+            {terrain.vegetationClasses.map((name, i) => (
+              <span key={name}>
+                <span className={styles.swatch} style={{ background: VEGETATION_COLOURS[i] }} />
+                {name}{" "}
+              </span>
+            ))}
+            <span className={styles.swatch} style={{ background: "#999" }} />
+            unknown
+          </span>
+        )}
         {colourBy === "capacity" && capacityRange && (
           <span data-testid="capacity-legend">
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark

@@ -39,6 +39,21 @@ Tarrawarra uses the bbox its own documentation prescribes.
 | tarrawarra | tarrawarra | 8,644 | 3,610 points | 19 (13 campaigns, some over two or three days) | 0–0.3 m |
 | nerrigundah | none in the file | | | | |
 
+## Vegetation maps on disk
+
+`python -m troi_ingest.f.ingest_site_vegetation` reads a year of Sentinel-2 NDVI from the lab's cube for each site and writes `vegetation/` beside the inputs, copied into `data/dev_sites/{stub}/vegetation/`: `manifest.json` plus `vegetation.npz` with `class_index` (int8: 0 grass, 1 tree, −1 unknown) and the per-cell `low`, `median` and `high` (the 10th, 50th and 90th percentiles of NDVI over the year). The year is the site's own last year when the archive (from mid-2015) has it, else 2023. A cell is a tree where its low NDVI is at least 0.4 and its swing, high minus low, is at most 0.2: an evergreen canopy moves by a fifth or less over a year, while grass swings by a third to a half at a dry site and by a quarter at a temperate one whose pasture never browns off, so the swing is what carries between sites. The thresholds are in the manifest's `meta` with the imagery period.
+
+| stub | imagery | NDVI low, median of cells | swing, median | tree share |
+|---|---|---|---|---|
+| esdale | 2025-07-02 to 2026-07-01 | 0.24 | 0.44 | 2 % |
+| llara | 2023-07-02 to 2024-06-30 | 0.23 | 0.23 | 8 % |
+| mri | 2025-06-04 to 2026-06-03 | 0.38 | 0.22 | 34 % |
+| sasmas_stanley | 2023 | 0.25 | 0.17 | 1 % |
+| tarrawarra | 2023 | 0.53 | 0.28 | 18 % |
+| nerrigundah | 2023 | 0.43 | 0.27 | 7 % |
+
+The tree share is sensitive to the swing cut where pasture stays green: at 0.25 instead of 0.2, tarrawarra reads 35 % and nerrigundah 33 %. The maps have not been checked against ground truth; the run page colours the terrain by class so they can be judged by eye.
+
 ## Source files used
 
 - `all_sites_observations.parquet`: 590,330 rows; columns site, station, lon, lat, time, depth_top_m, depth_bottom_m, vwc, n. Covers esdale, llara, mri, phenode, sasmas, tarrawarra.

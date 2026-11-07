@@ -12,7 +12,7 @@ from terrasim2.f.score_pairs import score_pairs
 from terrasim2.f.score_pairs_by_key import score_pairs_by_key
 
 
-def read_comparison(inputs_folder: Path, observations_folder: Path, store_folder: Path, root_depth: float) -> dict:
+def read_comparison(inputs_folder: Path, observations_folder: Path, store_folder: Path, root_depth: float | np.ndarray) -> dict:
     """How a run compares with its site's observations, for the days written so far.
 
     Parameters
@@ -23,15 +23,16 @@ def read_comparison(inputs_folder: Path, observations_folder: Path, store_folder
         The site's ``observations`` folder.
     store_folder : Path
         The run's zarr store.
-    root_depth : float, m
-        The run's root depth; the soil's wilting point and the depth the
-        stored water is spread over come from it.
+    root_depth : float or ndarray, m
+        The run's root depth, one value or a field; the soil's wilting
+        point and the depth the stored water is spread over come from it.
 
     Returns
     -------
     dict
         ``days_written``; ``n_points`` and ``n_paired`` (observations with
-        a modelled value so far); ``root_depth`` (m); ``layers``, the
+        a modelled value so far); ``root_depth`` (m, or null when it
+        varies by cell); ``layers``, the
         distinct depth intervals observed, each ``{top, bottom, n}`` in m;
         ``stations``, the station names; ``overall``, the scores of
         ``score_pairs`` over every paired observation; ``by_date``, one
@@ -57,7 +58,7 @@ def read_comparison(inputs_folder: Path, observations_folder: Path, store_folder
         "days_written": written,
         "n_points": observations.n_points,
         "n_paired": int(np.isfinite(modelled).sum()),
-        "root_depth": root_depth,
+        "root_depth": float(root_depth) if np.ndim(root_depth) == 0 else None,
         "layers": [{"top": float(top), "bottom": float(bottom), "n": int(n)} for (top, bottom), n in zip(intervals, counts)],
         "stations": observations.stations,
         "overall": _clean(score_pairs(observations.vwc, modelled)),
@@ -94,6 +95,8 @@ def t():
     assert 0 < c["overall"]["rmse"] < 0.5 and -1 < c["overall"]["r"] < 1
     json.dumps(c)
     assert all(v is None for v in c["by_station"][0].values() if isinstance(v, float) and math.isnan(v))
+    varied = read_comparison(inputs_folder, find_observations("tarrawarra"), store, np.full((72, 97), 0.3))
+    assert varied["root_depth"] is None and varied["overall"]["rmse"] == c["overall"]["rmse"], "a uniform field reads as the scalar does"
 
 
 if __name__ == "__main__":

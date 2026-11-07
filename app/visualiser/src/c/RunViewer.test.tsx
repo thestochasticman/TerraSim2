@@ -125,6 +125,33 @@ describe("RunViewer", () => {
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30 })));
   });
 
+  it("the tree root depth is null until set, goes into the request, and clears back to null", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ rootDepth: 0.3, treeRootDepth: null })));
+    fireEvent.change(screen.getByLabelText("tree root depth"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ treeRootDepth: 1.5 })));
+    fireEvent.change(screen.getByLabelText("tree root depth"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ treeRootDepth: null })));
+  });
+
+  it("offers the vegetation colouring only when the terrain has a map, with a legend naming the classes", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    expect(within(screen.getByRole("combobox", { name: "colour by" })).queryByRole("option", { name: /vegetation/ })).toBeNull();
+    useRun.mockReturnValue({ ...completeRun(), terrain: { ...terrain, vegetation: Float64Array.from([0, 1]), vegetationClasses: ["grass", "tree"] } });
+    fireEvent.change(select(), { target: { value: "tarrawarra" } });
+    await waitFor(() => expect(within(screen.getByRole("combobox", { name: "colour by" })).getByRole("option", { name: /vegetation/ })).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "vegetation" } });
+    expect(screen.getByTestId("scene").dataset.colourBy).toBe("vegetation");
+    expect(screen.getByTestId("vegetation-legend").textContent).toContain("grass");
+    expect(screen.getByTestId("vegetation-legend").textContent).toContain("tree");
+  });
+
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));

@@ -11,7 +11,7 @@ from terrasim2.k.terrain_grid import TerrainGrid
 from terrasim2.k.tile_series import TileSeries
 
 
-def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInputs:
+def load_model_inputs(folder: Path, root_depth: float | np.ndarray | None = None) -> ModelInputs:
     """Read a folder written by ``write_model_inputs`` back into a ModelInputs.
 
     Needs only NumPy and the standard library. Refuses a manifest whose
@@ -22,12 +22,13 @@ def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInp
     ----------
     folder : Path
         Contains manifest.json and the files it names.
-    root_depth : float, optional, m
+    root_depth : float or ndarray, optional, m
         When given and the inputs carry soil layers, the grid's capacity is
         recomputed for this root depth instead of taken from capacity.npy,
-        which holds the producer's choice; the result records it. Without
-        it, the manifest's root depth is recorded. Refused for inputs
-        without soil.
+        which holds the producer's choice; the result records it. One
+        value, or a field of the grid's shape where roots vary by cell.
+        Without it, the manifest's root depth is recorded. Refused for
+        inputs without soil.
 
     Returns
     -------
@@ -148,6 +149,10 @@ def t5():
     assert np.allclose(shallow.grid.capacity, [[0.035 * 300] * 3, [0.116 * 300] * 3])
     assert load_model_inputs(folder, root_depth=1.0).root_depth == 1.0
     assert np.isnan(load_model_inputs(folder, root_depth=1.0).grid.capacity[0, 0])
+    field = np.array([[0.3, 0.3, 0.1], [0.3, 1.0, 0.3]])
+    varied = load_model_inputs(folder, root_depth=field)
+    assert np.array_equal(varied.root_depth, field)
+    assert np.allclose(varied.grid.capacity, [[0.035 * 300, 0.035 * 300, 0.035 * 100], [0.116 * 300, 0.116 * 1000, 0.116 * 300]]), "capacity follows the depth of each cell"
 
 
 DEV_SITES = Path(__file__).resolve().parents[2] / "data" / "dev_sites"
