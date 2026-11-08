@@ -3,12 +3,13 @@ import numpy as np
 from terrasim2.f.compute_flow_direction import NO_OUTLET
 from terrasim2.k.bucket_model_params import BucketModelParams
 from terrasim2.k.routed_bucket_flux import RoutedBucketFlux
+from terrasim2.k.soil_hydraulics import SoilHydraulics
 from terrasim2.k.terrain_derivatives import TerrainDerivatives
 
 
 def step_routed_bucket_model(
     moisture: np.ndarray,
-    capacity: np.ndarray,
+    soil_hydraulics: SoilHydraulics,
     rain: np.ndarray,
     pet: np.ndarray,
     terrain_derivatives: TerrainDerivatives,
@@ -16,7 +17,7 @@ def step_routed_bucket_model(
 ) -> tuple[np.ndarray, np.ndarray]:
     """One day of buckets whose overflow runs downhill.
 
-    Each cell is a store of size ``capacity``. In order:
+    Each cell is a store of size ``soil_hydraulics.capacity``. In order:
 
     1. Rain fills the room left in each store. What does not fit is excess.
     2. Excess cascades: walking the cells from the ridges down, each cell
@@ -36,8 +37,8 @@ def step_routed_bucket_model(
     ----------
     moisture : ndarray (rows, cols), millimetres (mm)
         Store contents at the start of the day, in [0, capacity].
-    capacity : ndarray (rows, cols), millimetres (mm)
-        Store size per cell, non-negative.
+    soil_hydraulics : SoilHydraulics
+        Only ``capacity`` (mm) is read: store size per cell, non-negative.
     rain : ndarray (rows, cols), millimetres (mm)
         Rain arriving during the day, non-negative.
     pet : ndarray (rows, cols), millimetres (mm)
@@ -53,6 +54,7 @@ def step_routed_bucket_model(
     fluxes : ndarray (4, rows, cols), mm
         Indexed by ``RoutedBucketFlux``: INFILTRATION, INFLOW, RUNOFF, EVAPORATION.
     """
+    capacity = soil_hydraulics.capacity
     room = capacity - moisture
     infiltration = np.minimum(rain, room)
     excess = (rain - infiltration).ravel()
@@ -98,7 +100,7 @@ def t1():
     capacity = np.full((1, 3), 10.0)
     moisture = capacity.copy()
     rain = np.array([[6.0, 0.0, 0.0]])
-    new, f = step_routed_bucket_model(moisture, capacity, rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
+    new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
     assert np.array_equal(new, capacity)
     assert np.array_equal(f[RoutedBucketFlux.RUNOFF], [[0.0, 0.0, 6.0]])
     assert np.all(f[RoutedBucketFlux.INFLOW] == 0.0)
@@ -110,7 +112,7 @@ def t2():
     capacity = np.full((1, 3), 10.0)
     moisture = np.array([[10.0, 6.0, 9.0]])
     rain = np.array([[6.0, 0.0, 0.0]])
-    new, f = step_routed_bucket_model(moisture, capacity, rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
+    new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
     assert np.array_equal(f[RoutedBucketFlux.INFLOW], [[0.0, 4.0, 1.0]])
     assert np.array_equal(f[RoutedBucketFlux.RUNOFF], [[0.0, 0.0, 1.0]])
     assert np.array_equal(new, [[10.0, 10.0, 10.0]])
@@ -124,7 +126,7 @@ def t3():
     rain = np.zeros((3, 3))
     rain[1, 1] = 25.0
     d = _derivatives(z)
-    new, f = step_routed_bucket_model(moisture, capacity, rain, np.zeros((3, 3)), d, BucketModelParams())
+    new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, np.zeros((3, 3)), d, BucketModelParams())
     assert f[RoutedBucketFlux.INFILTRATION][1, 1] == 10.0
     assert new[1, 1] == 10.0 and new[2, 1] == 10.0, "the pit fills, then the spill cell below it"
     assert f[RoutedBucketFlux.RUNOFF].sum() == 5.0 and f[RoutedBucketFlux.RUNOFF][2, 1] == 5.0
@@ -140,7 +142,7 @@ def t4():
     moisture = rng.uniform(0.6, 1.0, (30, 40)) * capacity
     rain = np.full((30, 40), 25.0)
     pet = rng.uniform(0, 5, (30, 40))
-    new, f = step_routed_bucket_model(moisture, capacity, rain, pet, _derivatives(z), BucketModelParams())
+    new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, _derivatives(z), BucketModelParams())
     assert f.shape == (4, 30, 40) and np.all(f >= 0)
     per_cell = (new - moisture) - (f[RoutedBucketFlux.INFILTRATION] + f[RoutedBucketFlux.INFLOW] - f[RoutedBucketFlux.EVAPORATION])
     assert np.abs(per_cell).max() < 1e-9
@@ -162,8 +164,8 @@ def t5():
     rain = np.full((8, 8), 4.0)
     pet = np.full((8, 8), 2.0)
     d = _derivatives(z)
-    closed, fc = step_bucket_model(moisture, capacity, rain, pet, d, BucketModelParams())
-    routed, fr = step_routed_bucket_model(moisture, capacity, rain, pet, d, BucketModelParams())
+    closed, fc = step_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, d, BucketModelParams())
+    routed, fr = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, d, BucketModelParams())
     assert np.array_equal(fc[BucketFlux.INFILTRATION], fr[RoutedBucketFlux.INFILTRATION])
     assert abs(fc[BucketFlux.RUNOFF].sum() - fr[RoutedBucketFlux.RUNOFF].sum()) < 1e-9
     assert np.array_equal(closed, routed)

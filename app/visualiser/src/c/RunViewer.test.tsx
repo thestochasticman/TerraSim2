@@ -16,8 +16,8 @@ vi.mock("@/c/SeriesChart", () => ({
   ),
 }));
 vi.mock("@/c/TerrainScene", () => ({
-  TerrainScene: ({ grid, moisture, colourBy }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string }) => (
-    <div data-testid="scene" data-colour-by={colourBy ?? "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
+  TerrainScene: ({ grid, moisture, colourBy, fullCapacity }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array }) => (
+    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
   ),
 }));
 
@@ -59,6 +59,17 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "routed" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "routed" })));
+  });
+
+  it("the subsurface model shows its leak and rain-hours fields and sends them", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    expect(screen.queryByLabelText("leak fraction")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
+    fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6 })));
   });
 
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {
@@ -179,6 +190,26 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "capacity" } });
     expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("capacity");
     expect(screen.getByTestId("capacity-legend").textContent).toBe("capacity 12 to 58 mm, light to dark");
+  });
+
+  it("a subsurface run measures fullness over the plant store plus the free store", async () => {
+    const withFree: TerrainGrid = { ...terrain, capacity: Float64Array.from([40, 40]), freeCapacity: Float64Array.from([60, 70]) };
+    useRun.mockReturnValue({ ...idle, status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates }, terrain: withFree, latest: { t: 4, moisture: Float32Array.from([1, 2]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    expect(screen.getByTestId("scene").getAttribute("data-full")).toBe("none");
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(screen.getByTestId("scene").getAttribute("data-full")).toBe("100,110"));
+  });
+
+  it("the relative option passes through and shows the day's range", async () => {
+    useRun.mockReturnValue({ ...idle, status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates }, terrain, latest: { t: 4, moisture: Float32Array.from([10.25, 12.75]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "relative" } });
+    expect(screen.getByTestId("scene").getAttribute("data-colour-by")).toBe("relative");
+    expect(screen.getByTestId("relative-legend").textContent).toBe("10.3 to 12.8 mm this day, light to dark");
   });
 
   it("the drainage option colours by upslope cells and shows their range", async () => {

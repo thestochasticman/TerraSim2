@@ -21,14 +21,21 @@ def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
     -------
     dict
         ``rows``, ``cols``, ``cell_size`` (m), ``elevation`` (nested lists,
-        m), ``capacity`` (nested lists, mm; NaN as null) and
+        m), ``capacity`` (nested lists, mm; NaN as null), ``free_capacity``
+        (nested lists, mm, the pore space above field capacity at that root
+        depth, or null when the inputs carry no soil curve) and
         ``upslope_cells`` (nested lists, dimensionless: how many cells drain
         through each, from the pit-filled elevation).
     """
     inputs = load_model_inputs(inputs_folder)
     capacity = inputs.grid.capacity
-    if root_depth is not None and inputs.soil is not None:
-        capacity = inputs.soil.compute_capacity(root_depth)
+    free_capacity = None
+    depth = root_depth if root_depth is not None else inputs.root_depth
+    if inputs.soil is not None and depth is not None:
+        hydraulics = inputs.soil.compute_hydraulics(depth)
+        capacity = hydraulics.capacity
+        if hydraulics.has_conductivity:
+            free_capacity = hydraulics.free_capacity.tolist()
     derivatives = TerrainDerivatives(inputs.grid)
     return {
         "rows": inputs.shape[0],
@@ -36,6 +43,7 @@ def read_terrain(inputs_folder: Path, root_depth: float | None = None) -> dict:
         "cell_size": inputs.grid.cell_size,
         "elevation": inputs.grid.elevation.tolist(),
         "capacity": capacity.tolist(),
+        "free_capacity": free_capacity,
         "upslope_cells": derivatives.upslope_cells.tolist(),
     }
 
@@ -57,6 +65,8 @@ def t():
     deep = np.array(read_terrain(find_inputs("tarrawarra"), root_depth=1.0)["capacity"])
     assert np.allclose(shallow, np.array(terrain["capacity"])), "the stored capacity is the 0.3 m one"
     assert deep.mean() > 2 * shallow.mean()
+    free = np.array(terrain["free_capacity"])
+    assert free.shape == shallow.shape and free.min() > 0 and np.array(read_terrain(find_inputs("tarrawarra"), root_depth=1.0)["free_capacity"]).mean() > 2 * free.mean()
     upslope = np.array(terrain["upslope_cells"])
     assert upslope.shape == shallow.shape and upslope.min() == 1 and upslope.max() > 0.1 * upslope.size
     assert isinstance(terrain["upslope_cells"][0][0], int)

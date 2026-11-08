@@ -10,6 +10,7 @@ from terrasim2.f.write_run_block import write_run_block
 from terrasim2.k.model_inputs import ModelInputs
 from terrasim2.k.run_result import RunResult
 from terrasim2.k.run_store_params import RunStoreParams
+from terrasim2.k.soil_hydraulics import SoilHydraulics
 from terrasim2.k.step_function import StepFunction
 from terrasim2.k.terrain_derivatives import TerrainDerivatives
 
@@ -25,11 +26,13 @@ def run_model(
     """Run a process step day by day over the whole series.
 
     Each day the rain and reference evapotranspiration fields are laid onto
-    the cells, the step is called with the grid's moisture and capacity and
-    the terrain's derivatives, and the moisture it returns is written back
-    to the grid and recorded along with the fluxes. The physics lives
-    entirely in ``step``. The derivatives are one object for the whole run,
-    so whatever a step asks of the terrain is computed once.
+    the cells, the step is called with the grid's moisture, the soil's
+    hydraulics and the terrain's derivatives, and the moisture it returns
+    is written back to the grid and recorded along with the fluxes. The
+    physics lives entirely in ``step``. The hydraulics and derivatives are
+    one object each for the whole run: the hydraulics from the soil layers
+    at ``inputs.root_depth`` with the grid's capacity, or the capacity
+    alone when the inputs carry no soil.
 
     With no ``folder`` the histories are kept in memory. With one, they are
     written to a zarr store there in blocks of ``store_params.write_every_days``
@@ -61,13 +64,14 @@ def run_model(
     """
     grid = inputs.grid
     derivatives = TerrainDerivatives(grid)
+    hydraulics = _build_hydraulics(inputs)
     record_fluxes = store_params.record_fluxes
 
     if folder is None:
         moisture_history = np.empty((inputs.n_days, *grid.shape), dtype=np.float64)
         flux_history = None
         for t in range(inputs.n_days):
-            fluxes = _step_day(step, inputs, derivatives, params, t)
+            fluxes = _step_day(step, inputs, hydraulics, derivatives, params, t)
             moisture_history[t] = grid.moisture
             if record_fluxes:
                 if flux_history is None:
@@ -80,7 +84,7 @@ def run_model(
     block_fluxes: list[np.ndarray] = []
     t0 = 0
     for t in range(inputs.n_days):
-        fluxes = _step_day(step, inputs, derivatives, params, t)
+        fluxes = _step_day(step, inputs, hydraulics, derivatives, params, t)
         block_moisture.append(grid.moisture)
         if record_fluxes:
             block_fluxes.append(fluxes)
@@ -94,11 +98,20 @@ def run_model(
     return load_run_result(folder)
 
 
-def _step_day(step: StepFunction, inputs: ModelInputs, derivatives: TerrainDerivatives, params: Any, t: int) -> np.ndarray:
+def _build_hydraulics(inputs: ModelInputs) -> SoilHydraulics:
+    """The soil as the steps see it: from the layers at the inputs' root depth, else the grid's capacity alone."""
+    if inputs.soil is None or inputs.root_depth is None:
+        return SoilHydraulics(inputs.grid.capacity, inputs.root_depth)
+    hydraulics = inputs.soil.compute_hydraulics(inputs.root_depth)
+    hydraulics.capacity = inputs.grid.capacity
+    return hydraulics
+
+
+def _step_day(step: StepFunction, inputs: ModelInputs, hydraulics: SoilHydraulics, derivatives: TerrainDerivatives, params: Any, t: int) -> np.ndarray:
     """Advance the grid by day t and return that day's fluxes."""
     rain_today = get_values_on_cells(inputs.cell_map, inputs.rain, t)
     pet_today = get_values_on_cells(inputs.cell_map, inputs.pet, t)
-    inputs.grid.moisture, fluxes = step(inputs.grid.moisture, inputs.grid.capacity, rain_today, pet_today, derivatives, params)
+    inputs.grid.moisture, fluxes = step(inputs.grid.moisture, hydraulics, rain_today, pet_today, derivatives, params)
     return fluxes
 
 
@@ -142,10 +155,11 @@ def t2():
     seen = []
     derivatives_seen = set()
 
-    def recording_step(moisture, capacity, rain, pet, terrain_derivatives, params):
+    def recording_step(moisture, soil_hydraulics, rain, pet, terrain_derivatives, params):
         seen.append(rain.copy())
         derivatives_seen.add(id(terrain_derivatives))
         assert isinstance(terrain_derivatives, TerrainDerivatives)
+        assert isinstance(soil_hydraulics, SoilHydraulics) and not soil_hydraulics.has_conductivity
         return moisture + rain, rain[np.newaxis]
 
     inputs = _inputs()

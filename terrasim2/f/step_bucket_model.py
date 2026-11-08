@@ -2,12 +2,13 @@ import numpy as np
 
 from terrasim2.k.bucket_flux import BucketFlux
 from terrasim2.k.bucket_model_params import BucketModelParams
+from terrasim2.k.soil_hydraulics import SoilHydraulics
 from terrasim2.k.terrain_derivatives import TerrainDerivatives
 
 
 def step_bucket_model(
     moisture: np.ndarray,
-    capacity: np.ndarray,
+    soil_hydraulics: SoilHydraulics,
     rain: np.ndarray,
     pet: np.ndarray,
     terrain_derivatives: TerrainDerivatives,
@@ -15,7 +16,7 @@ def step_bucket_model(
 ) -> tuple[np.ndarray, np.ndarray]:
     """One day of the bucket model on every cell, independently.
 
-    Each cell is a closed store of size ``capacity``. In order:
+    Each cell is a closed store of size ``soil_hydraulics.capacity``. In order:
 
     1. Rain fills the room left in the store. What does not fit is runoff.
     2. Evaporation takes ``pet * (fullness ** stress_exponent)`` where
@@ -31,9 +32,9 @@ def step_bucket_model(
     ----------
     moisture : ndarray (rows, cols), millimetres (mm)
         Store contents at the start of the day. Must lie in [0, capacity].
-    capacity : ndarray (rows, cols), millimetres (mm)
-        Store size per cell, non-negative. A zero-capacity cell passes all
-        rain to runoff and never evaporates.
+    soil_hydraulics : SoilHydraulics
+        Only ``capacity`` (mm) is read: store size per cell, non-negative.
+        A zero-capacity cell passes all rain to runoff and never evaporates.
     rain : ndarray (rows, cols), millimetres (mm)
         Rain arriving during the day, non-negative.
     pet : ndarray (rows, cols), millimetres (mm)
@@ -49,6 +50,7 @@ def step_bucket_model(
     fluxes : ndarray (3, rows, cols), mm
         Indexed by ``BucketFlux``: INFILTRATION, RUNOFF, EVAPORATION.
     """
+    capacity = soil_hydraulics.capacity
     room = capacity - moisture
     infiltration = np.minimum(rain, room)
     runoff = rain - infiltration
@@ -75,7 +77,7 @@ def _derivatives(shape=(1, 1)) -> TerrainDerivatives:
 def _cell(moisture, capacity, rain, pet, exponent=1.0):
     """Run one cell as a 1x1 grid and return (new_moisture, infiltration, runoff, evaporation) as floats."""
     m, f = step_bucket_model(
-        np.array([[moisture]]), np.array([[capacity]]), np.array([[rain]]), np.array([[pet]]),
+        np.array([[moisture]]), SoilHydraulics(np.array([[capacity]])), np.array([[rain]]), np.array([[pet]]),
         _derivatives(), BucketModelParams(stress_exponent=exponent),
     )
     return float(m[0, 0]), float(f[BucketFlux.INFILTRATION, 0, 0]), float(f[BucketFlux.RUNOFF, 0, 0]), float(f[BucketFlux.EVAPORATION, 0, 0])
@@ -130,7 +132,7 @@ def t6():
     rain = rng.exponential(5, (40, 50)) * (rng.random((40, 50)) < 0.3)
     pet = rng.uniform(0, 8, (40, 50))
     derivatives = _derivatives((40, 50))
-    new, f = step_bucket_model(moisture, capacity, rain, pet, derivatives, BucketModelParams())
+    new, f = step_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, derivatives, BucketModelParams())
     assert "filled" not in derivatives.__dict__, "the closed bucket must not touch the terrain"
     assert f.shape == (3, 40, 50)
     balance = (new - moisture) - (rain - f[BucketFlux.RUNOFF] - f[BucketFlux.EVAPORATION])

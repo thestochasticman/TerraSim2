@@ -7,13 +7,20 @@ from terrasim2.f.load_model_inputs import load_model_inputs
 from terrasim2.f.run_model import run_model
 from terrasim2.f.step_bucket_model import step_bucket_model
 from terrasim2.f.step_routed_bucket_model import step_routed_bucket_model
+from terrasim2.f.step_subsurface_bucket_model import step_subsurface_bucket_model
 from terrasim2.k.bucket_flux import BucketFlux
 from terrasim2.k.bucket_model_params import BucketModelParams
 from terrasim2.k.routed_bucket_flux import RoutedBucketFlux
 from terrasim2.k.run_store_params import RunStoreParams
+from terrasim2.k.subsurface_bucket_flux import SubsurfaceBucketFlux
+from terrasim2.k.subsurface_bucket_params import SubsurfaceBucketParams
 
 # The step each request name runs, and the enum that names its fluxes.
-STEPS = {"bucket": (step_bucket_model, BucketFlux), "routed": (step_routed_bucket_model, RoutedBucketFlux)}
+STEPS = {
+    "bucket": (step_bucket_model, BucketFlux),
+    "routed": (step_routed_bucket_model, RoutedBucketFlux),
+    "subsurface": (step_subsurface_bucket_model, SubsurfaceBucketFlux),
+}
 
 
 def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) -> Path:
@@ -38,15 +45,16 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
     Path
         ``store_folder``.
     """
-    inputs = load_model_inputs(inputs_folder)
-    if inputs.soil is not None:
-        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
-    inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
+    inputs = _prepare_inputs(request, inputs_folder)
     step, flux_enum = STEPS[request.step]
+    if request.step == "subsurface":
+        params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, leak_fraction=request.leak_fraction, rain_hours=request.rain_hours)
+    else:
+        params = BucketModelParams(stress_exponent=request.stress_exponent)
     run_model(
         step,
         inputs,
-        BucketModelParams(stress_exponent=request.stress_exponent),
+        params,
         folder=Path(store_folder),
         store_params=RunStoreParams(
             chunk_days=request.chunk_days,
@@ -56,6 +64,16 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
         flux_names=[f.name.lower() for f in flux_enum],
     )
     return Path(store_folder)
+
+
+def _prepare_inputs(request: RunRequest, inputs_folder: Path):
+    """Load the inputs at the request's root depth, so capacity and the soil hydraulics agree, and set the start state."""
+    inputs = load_model_inputs(inputs_folder)
+    if inputs.soil is not None:
+        inputs.grid.capacity = inputs.soil.compute_capacity(request.root_depth)
+        inputs.root_depth = request.root_depth
+    inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
+    return inputs
 
 
 def t():
@@ -80,6 +98,13 @@ def t():
     routed = execute_run(RunRequest(stub="example", step="routed", write_every_days=31), find_inputs("example"), Path(tempfile.mkdtemp()) / "routed.zarr")
     assert load_run_result(routed).n_fluxes == 4
     assert zarr.open_group(routed, mode="r").attrs["flux_names"] == ["infiltration", "inflow", "runoff", "evaporation"]
+    subsurface = execute_run(RunRequest(stub="example", step="subsurface", rain_hours=6, write_every_days=31), find_inputs("example"), Path(tempfile.mkdtemp()) / "subsurface.zarr")
+    sub = load_run_result(subsurface)
+    assert sub.n_fluxes == 6 and zarr.open_group(subsurface, mode="r").attrs["flux_names"][3] == "leak"
+    assert np.isfinite(sub.get_moisture(30)).all()
+    prepared = _prepare_inputs(RunRequest(stub="example", root_depth=1.0), find_inputs("example"))
+    assert prepared.root_depth == 1.0, "the soil hydraulics must be built at the request's depth, not the manifest's"
+    assert prepared.grid.capacity.mean() > 2 * np.load(find_inputs("example") / "capacity.npy").mean()
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ def t():
     from app.api.f.find_inputs import find_inputs
 
     key = read_inputs_key(find_inputs("example"))
-    assert key.startswith("v2@20"), key
+    assert key.startswith("v3@20"), key
     folder = Path(tempfile.mkdtemp()) / "model_inputs"
     folder.mkdir()
     (folder / "manifest.json").write_text(json.dumps({"version": 2, "written_at": "2000-01-01T00:00:00+00:00"}))

@@ -23,9 +23,12 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
         soil_tile_index.npy int32 (rows, cols), which soil tile each cell reads
         soil_fraction.npy   float64 (n_layers, n_soil_tiles), m3 m-3 available
         soil_texture.npy    int8 (n_layers, n_soil_tiles), index into the manifest's textures
+        soil_campbell.npy   float64 (3, n_layers, n_soil_tiles): theta_s, psi_e (J kg-1), b
 
-    The three soil files exist only when the inputs carry soil layers; the
-    manifest's ``soil`` entry then names them with the layer bounds in m.
+    The soil files exist only when the inputs carry soil layers, the curve
+    file only when they carry a curve; the manifest's ``soil`` entry names
+    them with the layer bounds in m, and ``root_depth`` (m) says what
+    depth capacity.npy was computed for.
     Initial moisture is not written; a run sets it. Existing files in the
     folder are overwritten.
 
@@ -55,12 +58,16 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
         np.save(folder / "soil_tile_index.npy", inputs.soil.cell_map.tile_index.astype(np.int32))
         np.save(folder / "soil_fraction.npy", inputs.soil.available_fraction.astype(np.float64))
         np.save(folder / "soil_texture.npy", inputs.soil.texture_index.astype(np.int8))
+        files = {"tile_index": "soil_tile_index.npy", "fraction": "soil_fraction.npy", "texture": "soil_texture.npy"}
+        if inputs.soil.campbell is not None:
+            np.save(folder / "soil_campbell.npy", inputs.soil.campbell.astype(np.float64))
+            files["campbell"] = "soil_campbell.npy"
         soil = {
             "layer_bounds": inputs.soil.layer_bounds.tolist(),
             "n_tiles": inputs.soil.n_tiles,
             "textures": [str(tex) for tex in SoilTexture],
-            "files": {"tile_index": "soil_tile_index.npy", "fraction": "soil_fraction.npy", "texture": "soil_texture.npy"},
-            "units": {"layer_bounds": "m", "fraction": "m3 m-3"},
+            "files": files,
+            "units": {"layer_bounds": "m", "fraction": "m3 m-3", "campbell": ["m3 m-3", "J kg-1", "dimensionless"]},
         }
 
     manifest = {
@@ -79,6 +86,7 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
             "pet": {"file": "pet.csv", "units": inputs.pet.units},
         },
         "soil": soil,
+        "root_depth": inputs.root_depth,
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "meta": inputs.meta,
     }
@@ -108,8 +116,10 @@ def _inputs(with_soil: bool = False):
     soil = None
     if with_soil:
         soil_map = CellToTileMap(grid, tile_index=[[0, 0, 0], [1, 1, 1]], n_tiles=2)
-        soil = SoilLayers(soil_map, [0.0, 0.1, 0.3, 1.0], [[0.035, 0.116], [0.035, 0.116], [np.nan, 0.116]], [[0, 4], [0, 4], [-1, 4]])
-    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]}, soil=soil)
+        campbell = np.array([[[0.37, 0.43]] * 3, [[-0.73, -1.12]] * 3, [[1.69, 4.55]] * 3])
+        campbell[:, 2, 0] = np.nan
+        soil = SoilLayers(soil_map, [0.0, 0.1, 0.3, 1.0], [[0.035, 0.116], [0.035, 0.116], [np.nan, 0.116]], [[0, 4], [0, 4], [-1, 4]], campbell)
+    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]}, soil=soil, root_depth=0.3 if with_soil else None)
 
 
 def t1():
@@ -130,7 +140,7 @@ def t1():
     rows = list(csv.reader(open(folder / "rain.csv")))
     assert rows[0] == ["date", "tile_0", "tile_1"]
     assert rows[1] == ["2024-01-01", "5.0", "20.25"]
-    assert manifest["soil"] is None and not (folder / "soil_fraction.npy").exists()
+    assert manifest["soil"] is None and manifest["root_depth"] is None and not (folder / "soil_fraction.npy").exists()
 
 
 def t2():
@@ -148,6 +158,9 @@ def t2():
     texture = np.load(folder / "soil_texture.npy")
     assert texture.dtype == np.int8 and texture[2, 0] == -1 and texture[1, 1] == 4
     assert np.load(folder / "soil_tile_index.npy").dtype == np.int32
+    curve = np.load(folder / "soil_campbell.npy")
+    assert curve.shape == (3, 3, 2) and np.isnan(curve[:, 2, 0]).all() and curve[2, 0, 1] == 4.55
+    assert soil["files"]["campbell"] == "soil_campbell.npy" and manifest["root_depth"] == 0.3
 
 
 def t():

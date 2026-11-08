@@ -47,12 +47,13 @@ def load_soil_layers(troi: Troi, grid: TerrainGrid) -> SoilLayers:
 
     fraction = np.empty((len(DEPTHS), len(pixels)))
     texture = np.empty((len(DEPTHS), len(pixels)), dtype=np.int8)
+    campbell = np.empty((3, len(DEPTHS), len(pixels)))
     for k, depth in enumerate(DEPTHS):
         pick = lambda attribute: ds[f"{attribute}_{depth}"].values[lat_i, lon_i].astype(np.float64)  # noqa: E731
         sand, silt, clay = pick("Sand") / 100, pick("Silt") / 100, pick("Clay") / 100
         bulk_density = pick("Bulk_Density") * 1000
-        fraction[k], texture[k] = prepare_soil_layer(sand, silt, clay, bulk_density)
-    return SoilLayers(CellToTileMap(grid, tile_index, n_tiles=len(pixels)), LAYER_BOUNDS, fraction, texture)
+        fraction[k], texture[k], campbell[:, k] = prepare_soil_layer(sand, silt, clay, bulk_density)
+    return SoilLayers(CellToTileMap(grid, tile_index, n_tiles=len(pixels)), LAYER_BOUNDS, fraction, texture, campbell)
 
 
 def _load_or_skip(troi: Troi, grid: TerrainGrid) -> SoilLayers:
@@ -89,6 +90,9 @@ def t1():
     capacity = soil.compute_capacity(0.3)
     assert capacity.shape == soil.shape and np.isfinite(capacity).mean() > 0.9
     assert 5 < np.nanmean(capacity) < 80, np.nanmean(capacity)
+    assert soil.campbell is not None and soil.campbell.shape == (3, 6, soil.n_tiles)
+    hydraulics = soil.compute_hydraulics(0.3)
+    assert hydraulics.has_conductivity and 1e-5 < np.nanmedian(hydraulics.k_sat) < 1e-2, np.nanmedian(hydraulics.k_sat)
 
 
 def t2():

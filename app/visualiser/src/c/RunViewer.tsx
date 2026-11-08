@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
@@ -32,6 +32,8 @@ export function RunViewer() {
   const [stub, setStub] = useState<string>("");
   const [rootDepth, setRootDepth] = useState(0.3);
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
+  const [leakFraction, setLeakFraction] = useState(0);
+  const [rainHours, setRainHours] = useState(24);
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
@@ -65,7 +67,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, leakFraction, rainHours, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -74,6 +76,12 @@ export function RunViewer() {
   const progress = status === null ? "no run" : status.status === "missing" ? "starting…" : status.status;
   const capacityRange = terrain?.capacity ? computeFiniteRange(terrain.capacity) : null;
   const upslopeRange = terrain?.upslopeCells ? computeFiniteRange(terrain.upslopeCells) : null;
+  const relativeRange = useMemo(() => (shown ? computeFiniteRange(shown.moisture) : null), [shown]);
+  // A subsurface run holds water up to saturation, so its fullness is over the plant store plus the free store.
+  const fullCapacity = useMemo(() => {
+    if (!terrain?.capacity || !terrain.freeCapacity || request?.step !== "subsurface") return undefined;
+    return terrain.capacity.map((c, i) => c + (terrain.freeCapacity?.[i] ?? 0));
+  }, [terrain, request]);
 
   return (
     <div className={styles.viewer}>
@@ -93,8 +101,21 @@ export function RunViewer() {
           <select value={step} onChange={(e) => setStep(e.target.value as RunRequest["step"])} aria-label="model">
             <option value="bucket">closed buckets</option>
             <option value="routed">routed buckets, overflow runs downhill</option>
+            <option value="subsurface">subsurface, free water drains downslope</option>
           </select>
         </label>
+        {step === "subsurface" && (
+          <>
+            <label>
+              leak{" "}
+              <input type="number" min={0} max={1} step={0.05} value={leakFraction} onChange={(e) => setLeakFraction(Number(e.target.value))} aria-label="leak fraction" className={styles.depth} />
+            </label>
+            <label>
+              rain hours{" "}
+              <input type="number" min={0.5} max={24} step={0.5} value={rainHours} onChange={(e) => setRainHours(Number(e.target.value))} aria-label="rain hours" className={styles.depth} />
+            </label>
+          </>
+        )}
         <label>
           root depth, m{" "}
           <input type="number" min={0.05} max={2} step={0.05} value={rootDepth} onChange={(e) => setRootDepth(Number(e.target.value))} aria-label="root depth" className={styles.depth} />
@@ -108,6 +129,7 @@ export function RunViewer() {
           colour{" "}
           <select value={colourBy} onChange={(e) => setColourBy(e.target.value as ColourBy)} aria-label="colour by">
             <option value="moisture">moisture, fraction of capacity</option>
+            <option value="relative">moisture, stretched over the day</option>
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
           </select>
@@ -115,6 +137,11 @@ export function RunViewer() {
         {colourBy === "capacity" && capacityRange && (
           <span data-testid="capacity-legend">
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
+          </span>
+        )}
+        {colourBy === "relative" && relativeRange && (
+          <span data-testid="relative-legend">
+            {relativeRange.min.toFixed(1)} to {relativeRange.max.toFixed(1)} mm this day, light to dark
           </span>
         )}
         {colourBy === "upslope" && upslopeRange && (
@@ -135,7 +162,7 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );
