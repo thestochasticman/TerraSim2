@@ -2,12 +2,15 @@ import numpy as np
 
 from terrasim2.k.bucket_flux import BucketFlux
 from terrasim2.k.bucket_model_params import BucketModelParams
+from terrasim2.k.terrain_derivatives import TerrainDerivatives
+
 
 def step_bucket_model(
     moisture: np.ndarray,
     capacity: np.ndarray,
     rain: np.ndarray,
     pet: np.ndarray,
+    terrain_derivatives: TerrainDerivatives,
     params: BucketModelParams,
 ) -> tuple[np.ndarray, np.ndarray]:
     """One day of the bucket model on every cell, independently.
@@ -21,7 +24,8 @@ def step_bucket_model(
     3. New moisture is old plus infiltration minus evaporation.
 
     So ``new - old == rain - runoff - evaporation`` exactly. No drainage,
-    no lateral flow; terrain plays no part.
+    no lateral flow; terrain plays no part, and ``terrain_derivatives`` is
+    taken only to meet the step signature.
 
     Parameters
     ----------
@@ -34,6 +38,8 @@ def step_bucket_model(
         Rain arriving during the day, non-negative.
     pet : ndarray (rows, cols), millimetres (mm)
         Reference evapotranspiration demand for the day, non-negative.
+    terrain_derivatives : TerrainDerivatives
+        Not read.
     params : BucketModelParams
 
     Returns
@@ -60,11 +66,17 @@ def step_bucket_model(
     return new_moisture, fluxes
 
 
+def _derivatives(shape=(1, 1)) -> TerrainDerivatives:
+    from terrasim2.k.terrain_grid import TerrainGrid
+
+    return TerrainDerivatives(TerrainGrid(elevation=np.zeros(shape), cell_size=10.0))
+
+
 def _cell(moisture, capacity, rain, pet, exponent=1.0):
     """Run one cell as a 1x1 grid and return (new_moisture, infiltration, runoff, evaporation) as floats."""
     m, f = step_bucket_model(
         np.array([[moisture]]), np.array([[capacity]]), np.array([[rain]]), np.array([[pet]]),
-        BucketModelParams(stress_exponent=exponent),
+        _derivatives(), BucketModelParams(stress_exponent=exponent),
     )
     return float(m[0, 0]), float(f[BucketFlux.INFILTRATION, 0, 0]), float(f[BucketFlux.RUNOFF, 0, 0]), float(f[BucketFlux.EVAPORATION, 0, 0])
 
@@ -117,7 +129,9 @@ def t6():
     moisture = rng.uniform(0, 1, (40, 50)) * capacity
     rain = rng.exponential(5, (40, 50)) * (rng.random((40, 50)) < 0.3)
     pet = rng.uniform(0, 8, (40, 50))
-    new, f = step_bucket_model(moisture, capacity, rain, pet, BucketModelParams())
+    derivatives = _derivatives((40, 50))
+    new, f = step_bucket_model(moisture, capacity, rain, pet, derivatives, BucketModelParams())
+    assert "filled" not in derivatives.__dict__, "the closed bucket must not touch the terrain"
     assert f.shape == (3, 40, 50)
     balance = (new - moisture) - (rain - f[BucketFlux.RUNOFF] - f[BucketFlux.EVAPORATION])
     assert np.abs(balance).max() < 1e-9
