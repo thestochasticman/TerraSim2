@@ -2,6 +2,7 @@ import json
 import sys
 from pathlib import Path
 
+from app.api.f.compute_demand_factor import compute_demand_factor
 from app.api.f.compute_root_depth_field import compute_root_depth_field
 from app.api.k.run_request import RunRequest
 from terrasim2.f.load_model_inputs import load_model_inputs
@@ -71,13 +72,17 @@ def _prepare_inputs(request: RunRequest, inputs_folder: Path):
     """Load the inputs at the request's root depth, so capacity and the soil hydraulics agree, and set the start state.
 
     The depth is one value, or a field by vegetation class when the request
-    names a tree depth and the site folder beside the inputs holds a map.
+    names a tree depth and the site folder beside the inputs holds a map;
+    the demand factor likewise follows the map's cover when the request
+    gives a cover strength.
     """
     inputs = load_model_inputs(inputs_folder)
+    roots = (Path(inputs_folder).parents[1],)
     if inputs.soil is not None:
-        depth = compute_root_depth_field(request, (Path(inputs_folder).parents[1],))
+        depth = compute_root_depth_field(request, roots)
         inputs.grid.capacity = inputs.soil.compute_capacity(depth)
         inputs.root_depth = depth
+    inputs.demand_factor = compute_demand_factor(request, roots)
     inputs.grid.moisture[:] = request.initial_fullness * inputs.grid.capacity
     return inputs
 
@@ -111,6 +116,9 @@ def t():
     treed = _prepare_inputs(RunRequest(stub="tarrawarra", root_depth=0.3, tree_root_depth=1.0), find_inputs("tarrawarra"))
     assert isinstance(treed.root_depth, np.ndarray) and set(np.unique(treed.root_depth)) == {0.3, 1.0}, "tree cells take the tree depth"
     assert np.nanmean(treed.grid.capacity[treed.root_depth == 1.0]) > np.nanmean(treed.grid.capacity[treed.root_depth == 0.3])
+    assert treed.demand_factor is None, "no cover strength, the reference demand"
+    covered = _prepare_inputs(RunRequest(stub="tarrawarra", cover_strength=1.0), find_inputs("tarrawarra"))
+    assert covered.demand_factor is not None and covered.demand_factor.shape == covered.shape and abs(covered.demand_factor.mean() - 1.0) < 1e-6 and covered.demand_factor.min() > 0.2
     prepared = _prepare_inputs(RunRequest(stub="example", root_depth=1.0), find_inputs("example"))
     assert prepared.root_depth == 1.0, "the soil hydraulics must be built at the request's depth, not the manifest's"
     assert prepared.grid.capacity.mean() > 2 * np.load(find_inputs("example") / "capacity.npy").mean()

@@ -47,6 +47,7 @@ export function RunViewer() {
   const [rainHours, setRainHours] = useState(24);
   const [lateralMultiplier, setLateralMultiplier] = useState(1);
   const [aspectStrength, setAspectStrength] = useState(0);
+  const [coverStrength, setCoverStrength] = useState(0);
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
@@ -82,7 +83,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, aspectStrength, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -148,6 +149,10 @@ export function RunViewer() {
         <label title="where the site has a vegetation map, tree cells reach this deep; blank for the same depth everywhere">
           tree roots, m{" "}
           <input type="number" min={0.05} max={3} step={0.05} value={treeRootDepth ?? ""} placeholder="same" onChange={(e) => setTreeRootDepth(e.target.value === "" ? null : Number(e.target.value))} aria-label="tree root depth" className={styles.depth} />
+        </label>
+        <label title="where the site has a vegetation map, each cell's evaporative demand follows its persistent cover relative to the site's mean, to this power; 0 ignores cover">
+          cover{" "}
+          <input type="number" min={0} max={3} step={0.25} value={coverStrength} onChange={(e) => setCoverStrength(Number(e.target.value))} aria-label="cover strength" className={styles.depth} />
         </label>
         <button type="button" onClick={start} disabled={!stub || !(rootDepth > 0)}>
           run

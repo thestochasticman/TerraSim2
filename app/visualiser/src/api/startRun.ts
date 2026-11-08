@@ -20,6 +20,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
       rain_hours: request.rainHours,
       lateral_multiplier: request.lateralMultiplier,
       aspect_strength: request.aspectStrength,
+      cover_strength: request.coverStrength,
       write_every_days: request.writeEveryDays,
       record_fluxes: request.recordFluxes,
     }),
