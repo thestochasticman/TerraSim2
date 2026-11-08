@@ -21,6 +21,10 @@ vi.mock("@/c/TerrainSurface", () => ({
   ),
 }));
 
+vi.mock("@/c/ObservationMarkers", () => ({
+  ObservationMarkers: ({ markers }: { markers: { count: number } }) => <div data-testid="markers" data-count={markers.count} />,
+}));
+
 const { TerrainScene } = await import("./TerrainScene");
 
 describe("TerrainScene", () => {
@@ -36,6 +40,16 @@ describe("TerrainScene", () => {
   it("passes a day's moisture through to the surface", () => {
     render(<TerrainScene grid={grid} moisture={new Float32Array(15)} />);
     expect(screen.getByTestId("surface").dataset.moisture).toBe("15");
+  });
+
+  it("draws observation markers inside the canvas when given a non-empty set", () => {
+    const { rerender } = render(<TerrainScene grid={grid} />);
+    expect(screen.queryByTestId("markers")).toBeNull();
+    rerender(<TerrainScene grid={grid} markers={{ count: 0, positions: new Float32Array(0), colours: new Float32Array(0), radius: 1 }} />);
+    expect(screen.queryByTestId("markers")).toBeNull();
+    rerender(<TerrainScene grid={grid} markers={{ count: 2, positions: new Float32Array(6), colours: new Float32Array(6), radius: 1 }} />);
+    expect(screen.getByTestId("canvas").contains(screen.getByTestId("markers"))).toBe(true);
+    expect(screen.getByTestId("markers").dataset.count).toBe("2");
   });
 
   it("orbits around the grid centre and starts the camera framed to the grid", () => {

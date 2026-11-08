@@ -15,8 +15,9 @@ class SoilHydraulics:
     ----------
     capacity : array_like, mm
         Plant-available water each cell can hold, shape (rows, cols).
-    root_depth : float, m, optional
-        The depth the fields were evaluated over.
+    root_depth : float or array_like, m, optional
+        The depth the fields were evaluated over: one value for the whole
+        grid, or a field of the capacity's shape where roots vary by cell.
     k_sat : array_like, kg s m-3, optional
         Saturated hydraulic conductivity per cell.
     b : array_like, dimensionless, optional
@@ -30,7 +31,8 @@ class SoilHydraulics:
 
     Attributes
     ----------
-    capacity, root_depth, k_sat, b, theta_s, theta_fc, theta_wp : as given, as arrays
+    capacity, k_sat, b, theta_s, theta_fc, theta_wp : as given, as arrays
+    root_depth : float, or ndarray (rows, cols), m, or None
     shape : tuple[int, int], dimensionless
     has_conductivity : bool
     """
@@ -40,7 +42,7 @@ class SoilHydraulics:
     def __init__(
         self,
         capacity: npt.ArrayLike,
-        root_depth: float | None = None,
+        root_depth: float | npt.ArrayLike | None = None,
         k_sat: npt.ArrayLike | None = None,
         b: npt.ArrayLike | None = None,
         theta_s: npt.ArrayLike | None = None,
@@ -59,9 +61,14 @@ class SoilHydraulics:
             if arr is not None and arr.shape != self.capacity.shape:
                 raise ValueError(f"{name} must have the capacity's shape {self.capacity.shape}")
             setattr(self, name, arr)
-        self.root_depth = None if root_depth is None else float(root_depth)
-        if self.root_depth is not None and not self.root_depth > 0:
-            raise ValueError("root_depth must be positive")
+        self.root_depth: float | np.ndarray | None = None
+        if root_depth is not None:
+            depth = np.asarray(root_depth, dtype=np.float64)
+            if depth.ndim not in (0, 2) or (depth.ndim == 2 and depth.shape != self.capacity.shape):
+                raise ValueError(f"root_depth must be one value or a field of the capacity's shape {self.capacity.shape}")
+            if not np.all(depth > 0):
+                raise ValueError("root_depth must be positive")
+            self.root_depth = float(depth) if depth.ndim == 0 else depth
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -107,6 +114,9 @@ def t1():
         pass
     else:
         raise AssertionError("expected ValueError for free_capacity without a curve")
+    varied = SoilHydraulics(np.full((2, 3), 40.0), [[0.3, 0.3, 1.0], [1.0, 0.3, 0.3]], np.full((2, 3), 1e-3), np.full((2, 3), 3.0), np.full((2, 3), 0.45), np.full((2, 3), 0.25), np.full((2, 3), 0.1))
+    assert isinstance(varied.root_depth, np.ndarray) and varied.root_depth.shape == (2, 3)
+    assert np.allclose(varied.free_capacity, [[60.0, 60.0, 200.0], [200.0, 60.0, 60.0]]), "a field of depths gives a free store per cell"
 
 
 def t2():
@@ -117,6 +127,8 @@ def t2():
         dict(capacity=cap, k_sat=cap, b=cap, theta_s=cap, theta_fc=cap, theta_wp=np.zeros((3, 3))),
         dict(capacity=np.ones(3)),
         dict(capacity=cap, root_depth=0.0),
+        dict(capacity=cap, root_depth=np.ones((3, 2))),
+        dict(capacity=cap, root_depth=[[0.3, 0.3, 0.0], [0.3, 0.3, 0.3]]),
     ):
         try:
             SoilHydraulics(**kwargs)

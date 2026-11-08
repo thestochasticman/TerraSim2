@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "rows": 901,
+  "cols": 444,
+  "n_points": 179287,
+  "stations": [
+    "14559",
+    "14561",
+    "14565",
+    "14566",
+    "14568",
+    "14569",
+    "14570",
+    "14572",
+    "14573",
+    "14574",
+    "14576",
+    "14578",
+    "14579",
+    "14580",
+    "14583",
+    "5893",
+    "5898",
+    "5915"
+  ],
+  "start": "2020-09-25",
+  "end": "2026-06-03",
+  "n_dates": 1930,
+  "file": "observations.npz",
+  "columns": {
+    "dates": {
+      "units": "datetime64[D]"
+    },
+    "row": {
+      "units": "dimensionless"
+    },
+    "col": {
+      "units": "dimensionless"
+    },
+    "station": {
+      "units": "index into stations"
+    },
+    "depth_top": {
+      "units": "m"
+    },
+    "depth_bottom": {
+      "units": "m"
+    },
+    "vwc": {
+      "units": "m3 m-3"
+    },
+    "n": {
+      "units": "readings averaged"
+    }
+  },
+  "written_at": "2026-11-06T21:25:13+00:00",
+  "meta": {
+    "stub": "mri",
+    "source": "/home/yasar/Downloads/Dense_sites/all_sites_observations.parquet",
+    "sources": [
+      "mri"
+    ],
+    "n_rows_read": 179287,
+    "n_outside_window": 0,
+    "n_outside_dates": 0,
+    "n_invalid": 0,
+    "n_readings": 8574396
+  }
+}

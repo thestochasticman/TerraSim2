@@ -4,13 +4,18 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Response
 
 from app.api.f.compute_retention_curves import compute_retention_curves
+from app.api.f.compute_root_depth_field import compute_root_depth_field
 from app.api.f.compute_run_id import compute_run_id
 from app.api.f.compute_soil_column import compute_soil_column
 from app.api.f.compute_texture_triangle import compute_texture_triangle
 from app.api.f.find_inputs import DEV_SITES, find_inputs
+from app.api.f.find_observations import find_observations
+from app.api.f.find_vegetation import find_vegetation
 from app.api.f.launch_run import launch_run
+from app.api.f.read_comparison import read_comparison
 from app.api.f.read_inputs_key import read_inputs_key
 from app.api.f.read_moisture_day import read_moisture_day
+from app.api.f.read_pairs import read_pairs
 from app.api.f.read_run_status import read_run_status
 from app.api.f.read_series import read_series
 from app.api.f.read_terrain import read_terrain
@@ -29,8 +34,15 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
     GET  /runs/{run_id}               status (missing, running, complete, failed),
                                       days_written, n_days, rows, cols, dates, meta
     GET  /runs/{run_id}/terrain       elevation and capacity for the run's site at its root depth
+                                      (a depth per cell when the request names a tree depth and the
+                                      site has a vegetation map), the map's classes when it has one
     GET  /runs/{run_id}/moisture/{t}  one day as little-endian float32 bytes; 409 until written
     GET  /runs/{run_id}/series        grid-mean daily series for the days written
+    GET  /runs/{run_id}/comparison    scores of the run against the site's observations, overall,
+                                      per survey date and per station, for the days written;
+                                      404 when the site has no prepared observations
+    GET  /runs/{run_id}/pairs         every observation with the run's value at it, six float32
+                                      columns (t, row, col, station, observed, modelled); 404 likewise
     GET  /soils/retention             the book's retention curves and available water per texture
     GET  /soils/texture               the USDA texture triangle on a one-percent grid, classified
     GET  /soils/column                one layered column's available water; query textures (comma list), root_depth, model
@@ -109,10 +121,15 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
             s = {**s, "status": "failed"}
         return {"run_id": run_id, **s}
 
+    def site_root(inputs: Path) -> tuple[Path]:
+        """The root the inputs came from, so a site's map and observations are looked for beside them."""
+        return (inputs.parents[1],)
+
     @app.get("/runs/{run_id}/terrain")
     def terrain(run_id: str) -> dict:
         request = request_of(run_id)
-        return read_terrain(find_inputs(request.stub, inputs_roots), request.root_depth)
+        inputs = find_inputs(request.stub, inputs_roots)
+        return read_terrain(inputs, compute_root_depth_field(request, site_root(inputs)), find_vegetation(request.stub, site_root(inputs)))
 
     @app.get("/runs/{run_id}/moisture/{t}")
     def moisture(run_id: str, t: int) -> Response:
@@ -130,6 +147,27 @@ def create_app(runs_root: Path, inputs_roots: tuple[Path, ...] = (DEV_SITES,)) -
         if read_run_status(store)["status"] == "missing":
             raise HTTPException(409, "run has not started writing yet")
         return read_series(find_inputs(request.stub, inputs_roots), store)
+
+    def observed_run(run_id: str) -> tuple[RunRequest, Path, Path, Path]:
+        request = request_of(run_id)
+        store = run_folder(run_id) / "store.zarr"
+        if read_run_status(store)["status"] == "missing":
+            raise HTTPException(409, "run has not started writing yet")
+        try:
+            observations = find_observations(request.stub, inputs_roots)
+        except FileNotFoundError as err:
+            raise HTTPException(404, str(err)) from err
+        return request, find_inputs(request.stub, inputs_roots), observations, store
+
+    @app.get("/runs/{run_id}/comparison")
+    def comparison(run_id: str) -> dict:
+        request, inputs, observations, store = observed_run(run_id)
+        return read_comparison(inputs, observations, store, compute_root_depth_field(request, site_root(inputs)))
+
+    @app.get("/runs/{run_id}/pairs")
+    def pairs(run_id: str) -> Response:
+        request, inputs, observations, store = observed_run(run_id)
+        return Response(content=read_pairs(inputs, observations, store, compute_root_depth_field(request, site_root(inputs))), media_type="application/octet-stream")
 
     return app
 
@@ -189,3 +227,36 @@ def t():
     assert np.mean(deep_terrain["capacity"]) > 2 * np.mean(terrain["capacity"])
     assert client.post("/runs", json={"stub": "nowhere"}).status_code == 404
     assert client.get("/runs/not-a-run").status_code == 404
+    assert client.get(f"/runs/{run_id}/comparison").status_code == 404, "the example region has no observations"
+    assert client.get(f"/runs/{run_id}/pairs").status_code == 404
+
+    observed = client.post("/runs", json={"stub": "tarrawarra", "write_every_days": 64, "record_fluxes": False}).json()
+    for _ in range(600):
+        s = client.get(f"/runs/{observed['run_id']}").json()
+        if s["status"] == "complete":
+            break
+        time.sleep(0.1)
+    assert s["status"] == "complete", s
+    comparison = client.get(f"/runs/{observed['run_id']}/comparison").json()
+    assert comparison["n_paired"] == comparison["n_points"] == 8644 and len(comparison["by_date"]) == 19
+    assert comparison["overall"]["n"] == 8644 and comparison["by_date"][0]["t"] == 0
+    pairs = client.get(f"/runs/{observed['run_id']}/pairs").content
+    assert len(pairs) == 6 * 8644 * 4
+    plain_terrain = client.get(f"/runs/{observed['run_id']}/terrain").json()
+    assert plain_terrain["vegetation_classes"] == ["grass", "tree"] and len(plain_terrain["vegetation"]) == plain_terrain["rows"]
+
+    treed = client.post("/runs", json={"stub": "tarrawarra", "write_every_days": 64, "record_fluxes": False, "tree_root_depth": 1.0}).json()
+    assert treed["run_id"] != observed["run_id"]
+    treed_terrain = client.get(f"/runs/{treed['run_id']}/terrain").json()
+    classes = np.array(treed_terrain["vegetation"])
+    plain_capacity, treed_capacity = np.array(plain_terrain["capacity"], dtype=float), np.array(treed_terrain["capacity"], dtype=float)
+    assert np.allclose(treed_capacity[classes != 1], plain_capacity[classes != 1], equal_nan=True), "grass keeps the one depth"
+    if (classes == 1).any():
+        assert np.nanmean(treed_capacity[classes == 1]) > np.nanmean(plain_capacity[classes == 1]), "trees get the deeper store"
+    for _ in range(600):
+        s = client.get(f"/runs/{treed['run_id']}").json()
+        if s["status"] == "complete":
+            break
+        time.sleep(0.1)
+    assert s["status"] == "complete", s
+    assert client.get(f"/runs/{treed['run_id']}/comparison").json()["root_depth"] is None, "a depth per cell is not one number"

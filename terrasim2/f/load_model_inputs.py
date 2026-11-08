@@ -6,12 +6,13 @@ import numpy as np
 
 from terrasim2.k.cell_to_tile_map import CellToTileMap
 from terrasim2.k.model_inputs import ModelInputs
+from terrasim2.k.soil_conventions import SoilConventions
 from terrasim2.k.soil_layers import SoilLayers
 from terrasim2.k.terrain_grid import TerrainGrid
 from terrasim2.k.tile_series import TileSeries
 
 
-def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInputs:
+def load_model_inputs(folder: Path, root_depth: float | np.ndarray | None = None) -> ModelInputs:
     """Read a folder written by ``write_model_inputs`` back into a ModelInputs.
 
     Needs only NumPy and the standard library. Refuses a manifest whose
@@ -22,12 +23,13 @@ def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInp
     ----------
     folder : Path
         Contains manifest.json and the files it names.
-    root_depth : float, optional, m
+    root_depth : float or ndarray, optional, m
         When given and the inputs carry soil layers, the grid's capacity is
         recomputed for this root depth instead of taken from capacity.npy,
-        which holds the producer's choice; the result records it. Without
-        it, the manifest's root depth is recorded. Refused for inputs
-        without soil.
+        which holds the producer's choice; the result records it. One
+        value, or a field of the grid's shape where roots vary by cell.
+        Without it, the manifest's root depth is recorded. Refused for
+        inputs without soil.
 
     Returns
     -------
@@ -58,7 +60,7 @@ def load_model_inputs(folder: Path, root_depth: float | None = None) -> ModelInp
         grid.capacity = soil.compute_capacity(root_depth)
     else:
         root_depth = manifest.get("root_depth")
-    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil, root_depth=root_depth)
+    return ModelInputs(grid, cell_map, rain, pet, meta=manifest.get("meta", {}), soil=soil, root_depth=root_depth, latitude=manifest.get("latitude"))
 
 
 def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayers | None:
@@ -67,7 +69,8 @@ def _read_soil(folder: Path, entry: dict | None, grid: TerrainGrid) -> SoilLayer
     names = entry["files"]
     soil_map = CellToTileMap(grid, np.load(folder / names["tile_index"]), n_tiles=entry["n_tiles"])
     campbell = np.load(folder / names["campbell"]) if "campbell" in names else None
-    return SoilLayers(soil_map, entry["layer_bounds"], np.load(folder / names["fraction"]), np.load(folder / names["texture"]), campbell)
+    conventions = SoilConventions(**entry["conventions"])
+    return SoilLayers(soil_map, entry["layer_bounds"], np.load(folder / names["fraction"]), np.load(folder / names["texture"]), campbell, conventions)
 
 
 def _read_series(path: Path, name: str, units: str) -> TileSeries:
@@ -100,7 +103,7 @@ def t1():
     assert np.array_equal(back.pet.values, original.pet.values)
     assert back.rain.units == "mm" and back.pet.name == "pet"
     assert back.meta == original.meta
-    assert back.soil is None and back.root_depth is None
+    assert back.soil is None and back.root_depth is None and back.latitude is None
     try:
         load_model_inputs(folder, root_depth=0.5)
     except ValueError as err:
@@ -142,12 +145,17 @@ def t5():
     assert np.allclose(back.soil.available_fraction, original.soil.available_fraction, equal_nan=True)
     assert np.array_equal(back.soil.texture_index, original.soil.texture_index)
     assert np.allclose(back.soil.campbell, original.soil.campbell, equal_nan=True)
+    assert back.soil.conventions == original.soil.conventions == SoilConventions()
     assert np.all(back.grid.capacity == 80.0), "without a root depth the stored capacity stands"
-    assert back.root_depth == 0.3, "the manifest's root depth is recorded"
+    assert back.root_depth == 0.3 and back.latitude == -37.5, "the manifest's root depth and latitude are recorded"
     shallow = load_model_inputs(folder, root_depth=0.3)
     assert np.allclose(shallow.grid.capacity, [[0.035 * 300] * 3, [0.116 * 300] * 3])
     assert load_model_inputs(folder, root_depth=1.0).root_depth == 1.0
     assert np.isnan(load_model_inputs(folder, root_depth=1.0).grid.capacity[0, 0])
+    field = np.array([[0.3, 0.3, 0.1], [0.3, 1.0, 0.3]])
+    varied = load_model_inputs(folder, root_depth=field)
+    assert np.array_equal(varied.root_depth, field)
+    assert np.allclose(varied.grid.capacity, [[0.035 * 300, 0.035 * 300, 0.035 * 100], [0.116 * 300, 0.116 * 1000, 0.116 * 300]]), "capacity follows the depth of each cell"
 
 
 DEV_SITES = Path(__file__).resolve().parents[2] / "data" / "dev_sites"
@@ -180,6 +188,8 @@ def t4():
         assert inputs.rain.values.shape == (inputs.n_days, inputs.n_tiles)
         assert inputs.soil is not None and inputs.soil.n_layers == 6, f"{folder}: expected six SLGA layers"
         assert inputs.soil.campbell is not None and inputs.root_depth == inputs.meta["root_depth"]
+        assert inputs.latitude is not None and -40 < inputs.latitude < -28, f"{folder}: the sites lie in south-eastern Australia"
+        assert inputs.soil.conventions == SoilConventions(), f"{folder}: the committed inputs are prepared at the calibrated conventions"
         hydraulics = inputs.soil.compute_hydraulics(inputs.root_depth)
         assert hydraulics.has_conductivity and np.isfinite(hydraulics.k_sat).all(), f"{folder}: conductivity should be known everywhere"
         recomputed = inputs.soil.compute_capacity(inputs.meta["root_depth"])

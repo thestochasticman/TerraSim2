@@ -27,8 +27,10 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
 
     The soil files exist only when the inputs carry soil layers, the curve
     file only when they carry a curve; the manifest's ``soil`` entry names
-    them with the layer bounds in m, and ``root_depth`` (m) says what
-    depth capacity.npy was computed for.
+    them with the layer bounds in m and the conventions (the suctions, J
+    kg-1, the fraction was read between), ``root_depth`` (m) says what depth
+    capacity.npy was computed for, and ``latitude`` (degrees) where the
+    grid is, or null when the inputs do not say.
     Initial moisture is not written; a run sets it. Existing files in the
     folder are overwritten.
 
@@ -44,6 +46,10 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
         ``folder``.
     """
     folder = Path(folder)
+    if isinstance(inputs.root_depth, np.ndarray):
+        raise ValueError("model inputs on disk carry one root depth; a field of depths is set at run time from a vegetation map, not written")
+    if inputs.demand_factor is not None:
+        raise ValueError("model inputs on disk carry the reference demand; a demand factor is set at run time from a vegetation map, not written")
     folder.mkdir(parents=True, exist_ok=True)
 
     np.save(folder / "elevation.npy", inputs.grid.elevation.astype(np.float64))
@@ -67,7 +73,8 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
             "n_tiles": inputs.soil.n_tiles,
             "textures": [str(tex) for tex in SoilTexture],
             "files": files,
-            "units": {"layer_bounds": "m", "fraction": "m3 m-3", "campbell": ["m3 m-3", "J kg-1", "dimensionless"]},
+            "conventions": {"field_capacity_suction": inputs.soil.conventions.field_capacity_suction, "wilting_point_suction": inputs.soil.conventions.wilting_point_suction},
+            "units": {"layer_bounds": "m", "fraction": "m3 m-3", "campbell": ["m3 m-3", "J kg-1", "dimensionless"], "conventions": "J kg-1"},
         }
 
     manifest = {
@@ -87,6 +94,7 @@ def write_model_inputs(inputs: ModelInputs, folder: Path) -> Path:
         },
         "soil": soil,
         "root_depth": inputs.root_depth,
+        "latitude": inputs.latitude,
         "written_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "meta": inputs.meta,
     }
@@ -119,7 +127,7 @@ def _inputs(with_soil: bool = False):
         campbell = np.array([[[0.37, 0.43]] * 3, [[-0.73, -1.12]] * 3, [[1.69, 4.55]] * 3])
         campbell[:, 2, 0] = np.nan
         soil = SoilLayers(soil_map, [0.0, 0.1, 0.3, 1.0], [[0.035, 0.116], [0.035, 0.116], [np.nan, 0.116]], [[0, 4], [0, 4], [-1, 4]], campbell)
-    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]}, soil=soil, root_depth=0.3 if with_soil else None)
+    return ModelInputs(grid, cell_map, rain, pet, meta={"stub": "unit", "bbox": [1, 2, 3, 4]}, soil=soil, root_depth=0.3 if with_soil else None, latitude=-37.5 if with_soil else None)
 
 
 def t1():
@@ -140,7 +148,7 @@ def t1():
     rows = list(csv.reader(open(folder / "rain.csv")))
     assert rows[0] == ["date", "tile_0", "tile_1"]
     assert rows[1] == ["2024-01-01", "5.0", "20.25"]
-    assert manifest["soil"] is None and manifest["root_depth"] is None and not (folder / "soil_fraction.npy").exists()
+    assert manifest["soil"] is None and manifest["root_depth"] is None and manifest["latitude"] is None and not (folder / "soil_fraction.npy").exists()
 
 
 def t2():
@@ -151,6 +159,7 @@ def t2():
     manifest = json.loads((folder / "manifest.json").read_text())
     soil = manifest["soil"]
     assert soil["layer_bounds"] == [0.0, 0.1, 0.3, 1.0] and soil["n_tiles"] == 2 and soil["textures"][0] == "sand"
+    assert soil["conventions"] == {"field_capacity_suction": -10.0, "wilting_point_suction": -500.0}
     for name in soil["files"].values():
         assert (folder / name).exists(), name
     fraction = np.load(folder / "soil_fraction.npy")
@@ -160,9 +169,32 @@ def t2():
     assert np.load(folder / "soil_tile_index.npy").dtype == np.int32
     curve = np.load(folder / "soil_campbell.npy")
     assert curve.shape == (3, 3, 2) and np.isnan(curve[:, 2, 0]).all() and curve[2, 0, 1] == 4.55
-    assert soil["files"]["campbell"] == "soil_campbell.npy" and manifest["root_depth"] == 0.3
+    assert soil["files"]["campbell"] == "soil_campbell.npy" and manifest["root_depth"] == 0.3 and manifest["latitude"] == -37.5
+
+
+def t3():
+    """Inputs whose root depth is a field are refused: the layout records one depth."""
+    import tempfile
+
+    inputs = _inputs(with_soil=True)
+    inputs.root_depth = np.full(inputs.shape, 0.3)
+    try:
+        write_model_inputs(inputs, Path(tempfile.mkdtemp()) / "model_inputs")
+    except ValueError as err:
+        assert "field" in str(err)
+    else:
+        raise AssertionError("expected ValueError for a field of root depths")
+    demanding = _inputs(with_soil=True)
+    demanding.demand_factor = np.full(demanding.shape, 1.2)
+    try:
+        write_model_inputs(demanding, Path(tempfile.mkdtemp()) / "model_inputs")
+    except ValueError as err:
+        assert "demand" in str(err)
+    else:
+        raise AssertionError("expected ValueError for a demand factor")
 
 
 def t():
     t1()
     t2()
+    t3()

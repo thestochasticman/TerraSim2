@@ -34,10 +34,13 @@ def step_subsurface_bucket_model(
        as the driver (the kinematic approximation), at Campbell's
        conductivity for the cell's content::
 
-           drainage = K(theta) * g * slope * root_depth / cell_size * seconds_per_day
+           drainage = lateral_multiplier * K(theta) * g * slope * root_depth / cell_size * seconds_per_day
 
        and leaks straight down at ``K(theta) * g * leak_fraction``.
-       Both are taken from the start-of-day state and capped at the free
+       ``lateral_multiplier`` is the anisotropy of a real hillslope, where
+       macropores and layer boundaries carry water along the slope many
+       times faster than the matrix does; 1 is the matrix value. Both
+       fluxes are taken from the start-of-day state and capped at the free
        water. The flow width is taken as one cell size whatever the
        direction; a diagonal neighbour's slope already uses the longer
        distance, so this overstates diagonal flow by at most sqrt(2).
@@ -45,8 +48,11 @@ def step_subsurface_bucket_model(
        through the soil enters up to the room left; water arriving over
        the surface enters up to the room and the infiltration limit; the
        rest passes on over the surface, and outlets shed it as runoff.
-    4. Evaporation takes ``pet * (plant fullness ** stress_exponent)``,
-       capped at what the cell holds.
+    4. Evaporation takes ``demand * (plant fullness ** stress_exponent)``,
+       capped at what the cell holds, where the demand is ``pet`` scaled
+       by the sun the cell's slope receives relative to flat ground,
+       ``solar_ratio ** aspect_strength``; a strength of 0 leaves every
+       cell at ``pet``.
 
     Per cell, ``new - old == infiltration + inflow - drainage - leak -
     evaporation``. Over the grid, excess plus drainage equals inflow plus
@@ -64,7 +70,8 @@ def step_subsurface_bucket_model(
     pet : ndarray (rows, cols), millimetres (mm)
         Reference evapotranspiration demand for the day, non-negative.
     terrain_derivatives : TerrainDerivatives
-        Reads ``downstream``, ``order``, ``slope`` and the grid's cell size.
+        Reads ``downstream``, ``order``, ``slope`` and the grid's cell
+        size, and ``solar_ratio`` when ``aspect_strength`` is not 0.
     params : SubsurfaceBucketParams
 
     Returns
@@ -89,7 +96,7 @@ def step_subsurface_bucket_model(
     free = np.maximum(total - capacity, 0.0)
     theta = soil_hydraulics.theta_fc + free / depth_mm
     conductivity = compute_campbell_conductivity(np.nan_to_num(theta), np.nan_to_num(soil_hydraulics.theta_s, nan=1.0), np.nan_to_num(soil_hydraulics.b, nan=1.0), np.nan_to_num(soil_hydraulics.k_sat))
-    drainage = np.minimum(conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
+    drainage = np.minimum(params.lateral_multiplier * conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
     leak = np.minimum(conductivity * GRAVITY * params.leak_fraction * SECONDS_PER_DAY, free - drainage)
     total = (total - drainage - leak).ravel()
 
@@ -118,7 +125,8 @@ def step_subsurface_bucket_model(
     plant = np.minimum(total, capacity)
     with np.errstate(divide="ignore", invalid="ignore"):
         fullness = np.where(capacity > 0, plant / capacity, 0.0)
-    evaporation = np.minimum(pet * fullness**params.stress_exponent, total)
+    demand = pet if params.aspect_strength == 0 else pet * terrain_derivatives.solar_ratio**params.aspect_strength
+    evaporation = np.minimum(demand * fullness**params.stress_exponent, total)
 
     fluxes = np.empty((len(SubsurfaceBucketFlux), *moisture.shape), dtype=np.float64)
     fluxes[SubsurfaceBucketFlux.INFILTRATION] = infiltration
@@ -233,6 +241,48 @@ def t5():
 
 
 def t6():
+    """The lateral multiplier scales the downslope drainage alone: ten times the matrix value passes ten times
+    the water, the leak is untouched, and the free store still caps what can leave."""
+    h = _hydraulics((1, 3))
+    d = _derivatives([[2.0, 1.0, 0.0]])
+    rain = np.zeros((1, 3))
+    _, matrix = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01))
+    _, fast = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01, lateral_multiplier=10.0))
+    assert np.allclose(fast[F.DRAINAGE][0, :2], 10.0 * matrix[F.DRAINAGE][0, :2])
+    assert np.allclose(fast[F.LEAK], matrix[F.LEAK])
+    _, capped = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(lateral_multiplier=1000.0))
+    assert np.allclose(capped[F.DRAINAGE][0, :2], 60.0), "no more than the free store"
+
+
+def t7():
+    """Aspect: with a strength the sunny cell of a ridge evaporates more than the shaded one from the same store, by
+    the solar ratio to that power; with none both evaporate pet and the terrain's sun is never asked for."""
+    from terrasim2.k.terrain_grid import TerrainGrid
+
+    rows, cols = np.mgrid[0:5, 0:3]
+    ridge = 100.0 - 2.0 * np.abs(rows - 2)  # a crest along row 2: rows above face north, rows below face south
+    grid = TerrainGrid(elevation=ridge, cell_size=10.0)
+    h = _hydraulics((5, 3))
+    moisture = np.full((5, 3), 45.0)
+    rain = np.zeros((5, 3))
+    pet = np.full((5, 3), 3.0)
+    unlit = TerrainDerivatives(grid)
+    _, flat = step_subsurface_bucket_model(moisture, h, rain, pet, unlit, SubsurfaceBucketParams())
+    assert np.allclose(flat[F.EVAPORATION], 3.0) and "solar_ratio" not in unlit.__dict__
+    lit = TerrainDerivatives(grid, latitude=-37.66)
+    for strength in (1.0, 0.5):
+        _, sunny = step_subsurface_bucket_model(moisture, h, rain, pet, lit, SubsurfaceBucketParams(aspect_strength=strength))
+        assert np.allclose(sunny[F.EVAPORATION], 3.0 * lit.solar_ratio**strength)
+        assert sunny[F.EVAPORATION][0, 1] > 3.0 > sunny[F.EVAPORATION][4, 1], "north-facing dries faster in the south"
+    try:
+        step_subsurface_bucket_model(moisture, h, rain, pet, unlit, SubsurfaceBucketParams(aspect_strength=1.0))
+    except ValueError as err:
+        assert "latitude" in str(err)
+    else:
+        raise AssertionError("expected ValueError for aspect without a latitude")
+
+
+def t8():
     """Hydraulics without conductivity are refused with a message naming the step."""
     try:
         step_subsurface_bucket_model(np.zeros((1, 3)), SoilHydraulics(np.full((1, 3), 30.0)), np.zeros((1, 3)), np.zeros((1, 3)), _derivatives([[2.0, 1.0, 0.0]]), SubsurfaceBucketParams())
@@ -249,3 +299,5 @@ def t():
     t4()
     t5()
     t6()
+    t7()
+    t8()

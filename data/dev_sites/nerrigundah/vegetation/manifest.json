@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "rows": 98,
+  "cols": 107,
+  "classes": [
+    "grass",
+    "tree"
+  ],
+  "features": [
+    "low",
+    "median",
+    "high"
+  ],
+  "fraction": {
+    "grass": 0.932862864772077,
+    "tree": 0.06713713522792294
+  },
+  "n_unknown": 0,
+  "file": "vegetation.npz",
+  "units": {
+    "class_index": "index into classes, -1 unknown",
+    "features": "NDVI, dimensionless"
+  },
+  "written_at": "2026-11-07T01:15:32+00:00",
+  "meta": {
+    "stub": "nerrigundah",
+    "bbox": [
+      151.711,
+      -32.323,
+      151.722,
+      -32.314
+    ],
+    "imagery": {
+      "start": "2023-01-01",
+      "end": "2023-12-31",
+      "own_dates": false
+    },
+    "clear_looks": {
+      "median": 67.0,
+      "min": 62,
+      "max": 71
+    },
+    "thresholds": {
+      "tree_low_min": 0.4,
+      "tree_amplitude_max": 0.2
+    },
+    "sources": {
+      "ndvi": "Sentinel-2 ARD (DEA) via pysentinel2, cloud-masked on read; per cell the 10th, 50th and 90th percentiles of NDVI over the year"
+    },
+    "rule": "tree where the 10th percentile of NDVI is at least tree_low_min and the 90th minus the 10th is at most tree_amplitude_max; else grass; unknown where fewer than 8 clear looks"
+  }
+}

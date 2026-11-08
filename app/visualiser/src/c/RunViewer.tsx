@@ -3,13 +3,19 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSites } from "@/api/fetchSites";
+import { ComparisonView } from "@/c/ComparisonView";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
+import { buildObservationMarkers } from "@/f/buildObservationMarkers";
+import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
+import { VEGETATION_COLOURS } from "@/f/computeVegetationColours";
 import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
+import { useRunComparison } from "@/h/useRunComparison";
 import { useRunSeries } from "@/h/useRunSeries";
 import type { ColourBy } from "@/t/ColourBy";
+import type { MarkerMode } from "@/t/MarkerMode";
 import type { RunRequest } from "@/t/RunRequest";
 import styles from "./RunViewer.module.css";
 
@@ -25,24 +31,34 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  * the scrubber is a progress bar. When it completes, the scrubber unlocks:
  * play, pause and a day slider, each day fetched once and cached. The
  * series chart below grows with the run and marks the day on screen.
+ *
+ * When the site has observations, the day's points sit on the terrain as
+ * markers coloured by what was observed or by the run's error there, and
+ * the comparison below the chart scores the run against them.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
   const [sitesError, setSitesError] = useState<string | null>(null);
   const [stub, setStub] = useState<string>("");
   const [rootDepth, setRootDepth] = useState(0.3);
+  const [treeRootDepth, setTreeRootDepth] = useState<number | null>(null);
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
   const [leakFraction, setLeakFraction] = useState(0);
   const [rainHours, setRainHours] = useState(24);
+  const [lateralMultiplier, setLateralMultiplier] = useState(1);
+  const [aspectStrength, setAspectStrength] = useState(0);
+  const [coverStrength, setCoverStrength] = useState(0);
   const [request, setRequest] = useState<RunRequest | null>(null);
   const { status, terrain, latest, error: runError, fetchDay } = useRun(request);
   const complete = status?.status === "complete";
   const playback = usePlayback(status?.nDays ?? 0, complete);
   const { series, error: seriesError } = useRunSeries(status?.runId ?? null, status?.daysWritten ?? 0);
+  const { comparison, pairs, error: comparisonError } = useRunComparison(status?.runId ?? null, status?.daysWritten ?? 0);
   const [scrubbed, setScrubbed] = useState<{ runId: string; t: number; moisture: Float32Array } | null>(null);
   const [scrubError, setScrubError] = useState<string | null>(null);
   const [colourBy, setColourBy] = useState<ColourBy>("moisture");
-  const error = runError ?? sitesError ?? seriesError ?? scrubError;
+  const [markerMode, setMarkerMode] = useState<MarkerMode>("observed");
+  const error = runError ?? sitesError ?? seriesError ?? comparisonError ?? scrubError;
 
   useEffect(() => {
     fetchSites()
@@ -67,7 +83,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, leakFraction, rainHours, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -82,6 +98,8 @@ export function RunViewer() {
     if (!terrain?.capacity || !terrain.freeCapacity || request?.step !== "subsurface") return undefined;
     return terrain.capacity.map((c, i) => c + (terrain.freeCapacity?.[i] ?? 0));
   }, [terrain, request]);
+  const ranges = useMemo(() => (pairs ? computeComparisonRanges(pairs) : null), [pairs]);
+  const markers = useMemo(() => (terrain && pairs && ranges && shown ? buildObservationMarkers(terrain, pairs, shown.t, markerMode, ranges) : null), [terrain, pairs, ranges, shown, markerMode]);
 
   return (
     <div className={styles.viewer}>
@@ -114,11 +132,27 @@ export function RunViewer() {
               rain hours{" "}
               <input type="number" min={0.5} max={24} step={0.5} value={rainHours} onChange={(e) => setRainHours(Number(e.target.value))} aria-label="rain hours" className={styles.depth} />
             </label>
+            <label>
+              lateral ×{" "}
+              <input type="number" min={1} max={1000} step={1} value={lateralMultiplier} onChange={(e) => setLateralMultiplier(Number(e.target.value))} aria-label="lateral multiplier" className={styles.depth} />
+            </label>
+            <label title="how much a cell's evaporative demand follows the sun its slope receives; 0 ignores aspect">
+              aspect{" "}
+              <input type="number" min={0} max={3} step={0.25} value={aspectStrength} onChange={(e) => setAspectStrength(Number(e.target.value))} aria-label="aspect strength" className={styles.depth} />
+            </label>
           </>
         )}
         <label>
           root depth, m{" "}
           <input type="number" min={0.05} max={2} step={0.05} value={rootDepth} onChange={(e) => setRootDepth(Number(e.target.value))} aria-label="root depth" className={styles.depth} />
+        </label>
+        <label title="where the site has a vegetation map, tree cells reach this deep; blank for the same depth everywhere">
+          tree roots, m{" "}
+          <input type="number" min={0.05} max={3} step={0.05} value={treeRootDepth ?? ""} placeholder="same" onChange={(e) => setTreeRootDepth(e.target.value === "" ? null : Number(e.target.value))} aria-label="tree root depth" className={styles.depth} />
+        </label>
+        <label title="where the site has a vegetation map, each cell's evaporative demand follows its persistent cover relative to the site's mean, to this power; 0 ignores cover">
+          cover{" "}
+          <input type="number" min={0} max={3} step={0.25} value={coverStrength} onChange={(e) => setCoverStrength(Number(e.target.value))} aria-label="cover strength" className={styles.depth} />
         </label>
         <button type="button" onClick={start} disabled={!stub || !(rootDepth > 0)}>
           run
@@ -132,8 +166,21 @@ export function RunViewer() {
             <option value="relative">moisture, stretched over the day</option>
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
+            {terrain?.vegetation && <option value="vegetation">vegetation, tree or grass</option>}
           </select>
         </label>
+        {colourBy === "vegetation" && terrain?.vegetationClasses && (
+          <span data-testid="vegetation-legend">
+            {terrain.vegetationClasses.map((name, i) => (
+              <span key={name}>
+                <span className={styles.swatch} style={{ background: VEGETATION_COLOURS[i] }} />
+                {name}{" "}
+              </span>
+            ))}
+            <span className={styles.swatch} style={{ background: "#999" }} />
+            unknown
+          </span>
+        )}
         {colourBy === "capacity" && capacityRange && (
           <span data-testid="capacity-legend">
             capacity {capacityRange.min.toFixed(0)} to {capacityRange.max.toFixed(0)} mm, light to dark
@@ -149,6 +196,26 @@ export function RunViewer() {
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
           </span>
         )}
+        {comparison && (
+          <label>
+            observations{" "}
+            <select value={markerMode} onChange={(e) => setMarkerMode(e.target.value as MarkerMode)} aria-label="observations">
+              <option value="none">hidden</option>
+              <option value="observed">observed content</option>
+              <option value="error">model minus observed</option>
+            </select>
+          </label>
+        )}
+        {comparison && markerMode === "observed" && ranges?.observed && (
+          <span data-testid="observed-legend">
+            observed {ranges.observed.min.toFixed(2)} to {ranges.observed.max.toFixed(2)} m³/m³, light to dark
+          </span>
+        )}
+        {comparison && markerMode === "error" && ranges?.errorScale && (
+          <span data-testid="error-legend">
+            red where the model is drier, blue where wetter, full at {ranges.errorScale.toFixed(2)} m³/m³
+          </span>
+        )}
       </div>
       {status && status.daysWritten > 0 && (
         <DayScrubber
@@ -162,8 +229,9 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
+      {comparison && pairs && status && <ComparisonView comparison={comparison} pairs={pairs} day={shown?.t ?? null} dates={status.dates} onSeek={complete ? playback.setDay : undefined} />}
     </div>
   );
 }

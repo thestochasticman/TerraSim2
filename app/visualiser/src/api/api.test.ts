@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchMoistureDay } from "./fetchMoistureDay";
 import { fetchRetentionCurves } from "./fetchRetentionCurves";
+import { fetchRunComparison } from "./fetchRunComparison";
+import { fetchRunPairs } from "./fetchRunPairs";
 import { fetchRunSeries } from "./fetchRunSeries";
 import { fetchRunStatus } from "./fetchRunStatus";
 import { fetchSites } from "./fetchSites";
@@ -32,11 +34,11 @@ describe("api wrappers", () => {
 
   it("startRun posts snake_case fields and returns id and status", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ run_id: "tarrawarra-abc", status: "running" }));
-    const out = await startRun({ stub: "tarrawarra", step: "routed", stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, leakFraction: 0, rainHours: 24, writeEveryDays: 1, recordFluxes: true });
+    const out = await startRun({ stub: "tarrawarra", step: "routed", stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, treeRootDepth: 1.5, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0.5, coverStrength: 1, writeEveryDays: 1, recordFluxes: true });
     expect(out).toEqual({ runId: "tarrawarra-abc", status: "running" });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/runs");
-    expect(JSON.parse(String(init?.body))).toEqual({ stub: "tarrawarra", step: "routed", stress_exponent: 1, initial_fullness: 0.5, root_depth: 0.3, leak_fraction: 0, rain_hours: 24, write_every_days: 1, record_fluxes: true });
+    expect(JSON.parse(String(init?.body))).toEqual({ stub: "tarrawarra", step: "routed", stress_exponent: 1, initial_fullness: 0.5, root_depth: 0.3, tree_root_depth: 1.5, leak_fraction: 0, rain_hours: 24, lateral_multiplier: 1, aspect_strength: 0.5, cover_strength: 1, write_every_days: 1, record_fluxes: true });
   });
 
   it("fetchRunStatus, fetchTerrain and fetchRunSeries parse their bodies", async () => {
@@ -91,12 +93,35 @@ describe("api wrappers", () => {
     await expect(fetchMoistureDay("x", 99, 1, 2)).rejects.toThrow("status 409");
   });
 
+  it("fetchRunComparison and fetchRunPairs parse their bodies and read a 404 as no observations", async () => {
+    const scores = { n: 1, observed_mean: 0.3, modelled_mean: 0.2, bias: -0.1, rmse: 0.1, ubrmse: 0, r: null, nse: null, kge: null };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ days_written: 1, n_points: 1, n_paired: 1, root_depth: 0.3, layers: [], stations: ["a"], overall: scores, by_date: [{ date: "d", t: 0, ...scores }], by_station: [{ station: 0, ...scores }] }));
+    const comparison = await fetchRunComparison("x");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/runs/x/comparison");
+    expect(comparison?.byDate[0].observedMean).toBe(0.3);
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404));
+    expect(await fetchRunComparison("x")).toBeNull();
+
+    const buffer = new ArrayBuffer(24);
+    const view = new DataView(buffer);
+    [0, 1, 2, 0, 0.25, 0.2].forEach((v, i) => view.setFloat32(i * 4, v, true));
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => buffer } as unknown as Response);
+    const pairs = await fetchRunPairs("x");
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/runs/x/pairs");
+    expect(Array.from(pairs?.row ?? [])).toEqual([1]);
+    expect(pairs?.observed[0]).toBeCloseTo(0.25, 6);
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 404));
+    expect(await fetchRunPairs("x")).toBeNull();
+  });
+
   it("every wrapper rejects on a non-ok response", async () => {
     fetchMock.mockResolvedValue(jsonResponse({}, 500));
     await expect(fetchSites()).rejects.toThrow("500");
+    await expect(fetchRunComparison("x")).rejects.toThrow("500");
+    await expect(fetchRunPairs("x")).rejects.toThrow("500");
     await expect(fetchRunStatus("x")).rejects.toThrow("500");
     await expect(fetchTerrain("x")).rejects.toThrow("500");
     await expect(fetchRunSeries("x")).rejects.toThrow("500");
-    await expect(startRun({ stub: "x", step: "bucket", stressExponent: 1, initialFullness: 0, rootDepth: 0.3, leakFraction: 0, rainHours: 24, writeEveryDays: 1, recordFluxes: false })).rejects.toThrow("500");
+    await expect(startRun({ stub: "x", step: "bucket", stressExponent: 1, initialFullness: 0, rootDepth: 0.3, treeRootDepth: null, leakFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0, coverStrength: 0, writeEveryDays: 1, recordFluxes: false })).rejects.toThrow("500");
   });
 });

@@ -8,7 +8,8 @@ import { readPositiveInteger } from "./readPositiveInteger";
  *
  *     { "rows": 2, "cols": 3, "cell_size": 10.0, "elevation": [[...], [...]], "capacity": [[...], [...]] }
  *
- * `capacity`, `free_capacity` and `upslope_cells` are optional (null counts as absent); when present each must have the same shape as elevation.
+ * `capacity`, `free_capacity`, `upslope_cells` and `vegetation` are optional (null counts as absent); when present each must have
+ * the same shape as elevation, and `vegetation` comes with `vegetation_classes`, the names its indices stand for.
  *
  * data : unknown
  *     The result of JSON.parse on a terrain file or the service's terrain response.
@@ -40,6 +41,17 @@ export function parseTerrainGrid(data: unknown): TerrainGrid {
   }
   if (obj["upslope_cells"] !== undefined) {
     grid.upslopeCells = readField(obj, "upslope_cells", rows, cols);
+  }
+  if (obj["vegetation"] !== undefined && obj["vegetation"] !== null) {
+    const classes = obj["vegetation_classes"];
+    if (!Array.isArray(classes) || classes.length === 0 || !classes.every((c) => typeof c === "string")) {
+      throw new Error("vegetation_classes must name the vegetation indices");
+    }
+    grid.vegetation = readField(obj, "vegetation", rows, cols);
+    for (const v of grid.vegetation) {
+      if (!Number.isInteger(v) || v < -1 || v >= classes.length) throw new Error(`vegetation must index ${classes.length} classes or be -1`);
+    }
+    grid.vegetationClasses = classes as string[];
   }
   return grid;
 }

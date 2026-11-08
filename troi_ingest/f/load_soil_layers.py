@@ -85,11 +85,11 @@ def t1():
     assert np.array_equal(soil.layer_bounds, LAYER_BOUNDS)
     known = np.isfinite(soil.available_fraction)
     assert known.mean() > 0.9, "the example region is land with full SLGA coverage"
-    assert 0.02 < np.nanmin(soil.available_fraction) and np.nanmax(soil.available_fraction) < 0.30
+    assert 0.02 < np.nanmin(soil.available_fraction) and np.nanmax(soil.available_fraction) < 0.45
     assert soil.texture_index.min() >= 0 and soil.texture_index.max() < 12
     capacity = soil.compute_capacity(0.3)
     assert capacity.shape == soil.shape and np.isfinite(capacity).mean() > 0.9
-    assert 5 < np.nanmean(capacity) < 80, np.nanmean(capacity)
+    assert 5 < np.nanmean(capacity) < 120, np.nanmean(capacity)
     assert soil.campbell is not None and soil.campbell.shape == (3, 6, soil.n_tiles)
     hydraulics = soil.compute_hydraulics(0.3)
     assert hydraulics.has_conductivity and 1e-5 < np.nanmedian(hydraulics.k_sat) < 1e-2, np.nanmedian(hydraulics.k_sat)

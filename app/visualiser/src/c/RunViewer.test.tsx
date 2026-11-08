@@ -1,27 +1,38 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunState } from "@/h/useRun";
+import type { RunComparison } from "@/t/RunComparison";
+import type { RunPairs } from "@/t/RunPairs";
 import type { TerrainGrid } from "@/t/TerrainGrid";
 
 const fetchSites = vi.fn();
 const useRun = vi.fn<(request: unknown) => RunState>();
 const useRunSeries = vi.fn<(runId: string | null, daysWritten: number) => { series: unknown; error: string | null }>();
+const useRunComparison = vi.fn<(runId: string | null, daysWritten: number) => { comparison: RunComparison | null; pairs: RunPairs | null; error: string | null }>();
 
 vi.mock("@/api/fetchSites", () => ({ fetchSites: () => fetchSites() }));
 vi.mock("@/h/useRun", () => ({ useRun: (r: unknown) => useRun(r) }));
 vi.mock("@/h/useRunSeries", () => ({ useRunSeries: (id: string | null, d: number) => useRunSeries(id, d) }));
+vi.mock("@/h/useRunComparison", () => ({ useRunComparison: (id: string | null, d: number) => useRunComparison(id, d) }));
+vi.mock("@/c/ComparisonView", () => ({
+  ComparisonView: ({ day, onSeek }: { day: number | null; onSeek?: (d: number) => void }) => <div data-testid="comparison" data-day={day ?? "none"} data-seekable={onSeek ? "yes" : "no"} />,
+}));
 vi.mock("@/c/SeriesChart", () => ({
   SeriesChart: ({ day, onSeek }: { day: number | null; onSeek?: (d: number) => void }) => (
     <div data-testid="chart" data-day={day ?? "none"} data-seekable={onSeek ? "yes" : "no"} />
   ),
 }));
 vi.mock("@/c/TerrainScene", () => ({
-  TerrainScene: ({ grid, moisture, colourBy, fullCapacity }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array }) => (
-    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
+  TerrainScene: ({ grid, moisture, colourBy, fullCapacity, markers }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array; markers?: { count: number } }) => (
+    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"} data-markers={markers ? markers.count : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
   ),
 }));
 
 const { RunViewer } = await import("./RunViewer");
+
+const scores = { observedMean: 0.3, modelledMean: 0.2, bias: -0.1, rmse: 0.1, ubrmse: 0, r: null, nse: null, kge: null };
+const comparison: RunComparison = { daysWritten: 5, nPoints: 3, nPaired: 3, rootDepth: 0.3, layers: [{ top: 0, bottom: 0.3, n: 3 }], stations: ["a", "b"], overall: { n: 3, ...scores }, byDate: [{ date: "d2", t: 2, n: 2, ...scores }], byStation: [] };
+const pairs: RunPairs = { t: Float32Array.from([2, 2, 0]), row: Float32Array.from([0, 0, 0]), col: Float32Array.from([0, 1, 1]), station: Float32Array.from([0, 1, 1]), observed: Float32Array.from([0.2, 0.4, 0.3]), modelled: Float32Array.from([0.3, 0.3, 0.3]) };
 
 const terrain: TerrainGrid = { rows: 1, cols: 2, cellSize: 10, elevation: Float64Array.from([1, 2]) };
 const idle: RunState = { status: null, terrain: null, latest: null, error: null, fetchDay: async () => new Float32Array() };
@@ -32,6 +43,47 @@ describe("RunViewer", () => {
     fetchSites.mockReset().mockResolvedValue(["example", "tarrawarra"]);
     useRun.mockReset().mockReturnValue(idle);
     useRunSeries.mockReset().mockReturnValue({ series: null, error: null });
+    useRunComparison.mockReset().mockReturnValue({ comparison: null, pairs: null, error: null });
+  });
+
+  const completeRun = (): RunState => ({
+    ...idle,
+    status: { runId: "x", status: "complete", daysWritten: 5, nDays: 5, rows: 1, cols: 2, dates },
+    terrain,
+    latest: { t: 4, moisture: Float32Array.from([1, 2]) },
+  });
+
+  it("a site without observations shows no observations select and no comparison", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    expect(screen.queryByRole("combobox", { name: "observations" })).toBeNull();
+    expect(screen.queryByTestId("comparison")).toBeNull();
+    expect(screen.getByTestId("scene").dataset.markers).toBe("none");
+  });
+
+  it("with observations: the day's markers go to the scene coloured by observed content, the comparison follows the day, and the select can hide them or show the error", async () => {
+    useRun.mockReturnValue(completeRun());
+    useRunComparison.mockReturnValue({ comparison, pairs, error: null });
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("comparison")).toBeTruthy());
+    expect(useRunComparison).toHaveBeenLastCalledWith("x", 5);
+    expect(screen.getByTestId("scene").dataset.markers).toBe("none");
+    expect(screen.getByTestId("comparison").dataset.day).toBe("4");
+    expect(screen.getByTestId("comparison").dataset.seekable).toBe("yes");
+    expect(screen.getByTestId("observed-legend").textContent).toContain("0.20 to 0.40");
+
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "2" } });
+    await waitFor(() => expect(screen.getByTestId("scene").dataset.markers).toBe("2"));
+    expect(screen.getByTestId("comparison").dataset.day).toBe("2");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "error" } });
+    expect(screen.getByTestId("scene").dataset.markers).toBe("2");
+    expect(screen.getByTestId("error-legend").textContent).toContain("0.10");
+    expect(screen.queryByTestId("observed-legend")).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "none" } });
+    expect(screen.getByTestId("scene").dataset.markers).toBe("none");
   });
 
   const select = () => screen.getByRole("combobox", { name: "site" }) as HTMLSelectElement;
@@ -68,8 +120,47 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
     fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
     fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
+    fireEvent.change(screen.getByLabelText("lateral multiplier"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("aspect strength"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
+  });
+
+  it("the cover strength is 0 until set and goes into the request for any model", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "bucket", coverStrength: 0 })));
+    fireEvent.change(screen.getByLabelText("cover strength"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ coverStrength: 1 })));
+  });
+
+  it("the tree root depth is null until set, goes into the request, and clears back to null", async () => {
+    render(<RunViewer />);
+    await waitFor(() => expect(select().disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ rootDepth: 0.3, treeRootDepth: null })));
+    fireEvent.change(screen.getByLabelText("tree root depth"), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ treeRootDepth: 1.5 })));
+    fireEvent.change(screen.getByLabelText("tree root depth"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ treeRootDepth: null })));
+  });
+
+  it("offers the vegetation colouring only when the terrain has a map, with a legend naming the classes", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    expect(within(screen.getByRole("combobox", { name: "colour by" })).queryByRole("option", { name: /vegetation/ })).toBeNull();
+    useRun.mockReturnValue({ ...completeRun(), terrain: { ...terrain, vegetation: Float64Array.from([0, 1]), vegetationClasses: ["grass", "tree"] } });
+    fireEvent.change(select(), { target: { value: "tarrawarra" } });
+    await waitFor(() => expect(within(screen.getByRole("combobox", { name: "colour by" })).getByRole("option", { name: /vegetation/ })).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "vegetation" } });
+    expect(screen.getByTestId("scene").dataset.colourBy).toBe("vegetation");
+    expect(screen.getByTestId("vegetation-legend").textContent).toContain("grass");
+    expect(screen.getByTestId("vegetation-legend").textContent).toContain("tree");
   });
 
   it("the root depth field goes into the request, and an empty one disables the run button", async () => {

@@ -26,8 +26,9 @@ def run_model(
     """Run a process step day by day over the whole series.
 
     Each day the rain and reference evapotranspiration fields are laid onto
-    the cells, the step is called with the grid's moisture, the soil's
-    hydraulics and the terrain's derivatives, and the moisture it returns
+    the cells, the demand scaled by ``inputs.demand_factor`` where the
+    inputs carry one, the step is called with the grid's moisture, the
+    soil's hydraulics and the terrain's derivatives, and the moisture it returns
     is written back to the grid and recorded along with the fluxes. The
     physics lives entirely in ``step``. The hydraulics and derivatives are
     one object each for the whole run: the hydraulics from the soil layers
@@ -63,7 +64,7 @@ def run_model(
         Dates, moisture at the end of every day, and every day's fluxes if recorded.
     """
     grid = inputs.grid
-    derivatives = TerrainDerivatives(grid)
+    derivatives = TerrainDerivatives(grid, inputs.latitude)
     hydraulics = _build_hydraulics(inputs)
     record_fluxes = store_params.record_fluxes
 
@@ -111,6 +112,8 @@ def _step_day(step: StepFunction, inputs: ModelInputs, hydraulics: SoilHydraulic
     """Advance the grid by day t and return that day's fluxes."""
     rain_today = get_values_on_cells(inputs.cell_map, inputs.rain, t)
     pet_today = get_values_on_cells(inputs.cell_map, inputs.pet, t)
+    if inputs.demand_factor is not None:
+        pet_today = pet_today * inputs.demand_factor
     inputs.grid.moisture, fluxes = step(inputs.grid.moisture, hydraulics, rain_today, pet_today, derivatives, params)
     return fluxes
 
@@ -210,8 +213,28 @@ def t4():
     assert np.array_equal(np.asarray(disk.moisture_history[:]), full.moisture_history)
 
 
+def t5():
+    """A demand factor scales each cell's evaporation: twice the factor, twice the evaporation from the same store, and
+    the reference series itself is untouched."""
+    from terrasim2.f.step_bucket_model import step_bucket_model
+    from terrasim2.k.bucket_flux import BucketFlux
+    from terrasim2.k.bucket_model_params import BucketModelParams
+
+    plain = _inputs()
+    plain.grid.moisture[:] = 50.0
+    reference = run_model(step_bucket_model, plain, BucketModelParams())
+    demanding = _inputs()
+    demanding.grid.moisture[:] = 50.0
+    demanding.demand_factor = np.array([[2.0, 1.0, 1.0], [0.5, 1.0, 1.0]])
+    scaled = run_model(step_bucket_model, demanding, BucketModelParams())
+    e0, e1 = reference.get_fluxes(0)[BucketFlux.EVAPORATION], scaled.get_fluxes(0)[BucketFlux.EVAPORATION]
+    assert np.isclose(e1[0, 0], 2 * e0[0, 0]) and np.isclose(e1[1, 0], 0.5 * e0[1, 0]) and np.allclose(e1[:, 1:], e0[:, 1:])
+    assert np.array_equal(demanding.pet.values, plain.pet.values)
+
+
 def t():
     t1()
     t2()
     t3()
     t4()
+    t5()
