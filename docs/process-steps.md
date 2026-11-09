@@ -48,7 +48,7 @@ Two stores per cell: the plant store as before, and above it a free store betwee
 4. **Evapotranspiration.** Reference demand, scaled by the cell's `solar_ratio` to the power `aspect_strength`, times plant-store fullness to the stress exponent.
 
 - Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, leak_fraction=0.0, rain_hours=24.0, lateral_multiplier=1.0, aspect_strength=0.0)`.
-- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION. In hydrological terms, drainage here is drainage (interflow) and leak is deep drainage below the roots; these pages use the model's names throughout.
+- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION. In hydrological terms, drainage here is lateral subsurface flow (interflow) and leak is deep drainage below the roots; these pages use the model's names throughout.
 - Requires a retention curve (`SoilHydraulics.require_conductivity()`).
 
 ## Levers outside the step
