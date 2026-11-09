@@ -25,7 +25,7 @@ Runs go to `{troi out_dir}/terrasim2_runs/{run_id}/` with `request.json`, `store
 | `stress_exponent` | 1.0 | Evaporation falls with fullness to this power |
 | `initial_fullness` | 0.5 | The plant store's starting fraction of capacity |
 | `root_depth` | 0.3 | m; the inputs are prepared at this depth, capacity and hydraulics alike |
-| `leak_fraction` | 0.0 | Subsurface: fraction of the free store lost downward per day |
+| `percolation_fraction` | 0.0 | Subsurface: fraction of the free store that percolates below the roots per day; 0 is an impermeable base |
 | `rain_hours` | 24.0 | Subsurface: hours the day's rain falls over, setting the infiltration limit |
 | `lateral_multiplier` | 1.0 | Subsurface: anisotropy of the downslope drainage |
 | `aspect_strength` | 0.0 | Subsurface: demand follows `solar_ratio` to this power |

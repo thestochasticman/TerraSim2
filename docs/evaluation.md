@@ -10,7 +10,7 @@ Five of the six committed sites have observations. Each was scored at a small ha
 
 - One configuration is one run of a step on the site's committed inputs at the calibrated soil conventions, started at the first survey's observed mean, read at each observation's cell and day as θwp + stored / depth, and scored with `score_pairs` and `score_pairs_by_key` ([observations.md](observations.md)).
 - Scores are read together rather than as one objective: bias and NSE/KGE (level and timing), the mean within-date r over dates with at least 20 points (spatial pattern), the mean per-station r over stations with at least 30 readings (timing at a point), and the ratio of modelled to observed within-date spread.
-- The grid run: lateral multiplier {1, 3, 10, 30}, aspect exponent {0, 1, 2}, leak fraction {0, 0.01, 0.05} and, where the surface store required it, {0.2, 0.5, 1}, cover exponent {0.5, 1, 2, 4, 6, 8} absolute or relative to the site mean. Tarrawarra 50 configurations, Esdale 23, SASMAS 11, MRI 9, Llara 8.
+- The grid run: lateral multiplier {1, 3, 10, 30}, aspect exponent {0, 1, 2}, percolation fraction {0, 0.01, 0.05} and, where the surface store required it, {0.2, 0.5, 1}, cover exponent {0.5, 1, 2, 4, 6, 8} absolute or relative to the site mean. Tarrawarra 50 configurations, Esdale 23, SASMAS 11, MRI 9, Llara 8.
 - How each site's layers were read against the model's store:
 
 | Site | Model depth | Observations used |
@@ -27,9 +27,9 @@ Scores in m³/m³ where dimensional; the subsurface step throughout.
 
 | Site | Chosen setting | bias | NSE | KGE | spatial r | temporal r | What decided it |
 |---|---|---|---|---|---|---|---|
-| Tarrawarra | lateral 1, aspect 2, leak fraction 0.01 | +0.001 | 0.59 | 0.73 | 0.42 | – | aspect 0→1→2 lifts spatial r 0.22→0.40→0.42; lateral 3/10/30 never raises it and 10+ costs NSE; leak fraction 0.01 removes a +0.03 bias at no NSE cost, 0.05 collapses NSE to 0.2; any cover above 0 lowers spatial r |
-| MRI | lateral 1, aspect 0, leak fraction 0 (impermeable base) | −0.025 | 0.30 | 0.62 | – | 0.74 (4 profiles with complete triples) | the subsurface store lifts NSE from −0.64; any leak lowers it (0.22 at 0.01); aspect 0 and 1 score identically, so aspect is untested here; cover 1 raises temporal r to 0.79 but adds +0.04 bias |
-| Esdale | lateral 1, aspect 2, leak fraction 0.5, cover 4 (relative) | +0.025 | 0.45 | 0.72 | 0.33 | – | a free store with leak fraction ≤ 0.01 is catastrophic in a 0.1 m layer (bias +0.17, NSE −8); leak fraction 0.5 returns it to the bucket's level; relative cover 2→4 lifts spatial r −0.13→0.24→0.33; 6 and 8 over-spread |
+| Tarrawarra | lateral 1, aspect 2, percolation fraction 0.01 | +0.001 | 0.59 | 0.73 | 0.42 | – | aspect 0→1→2 lifts spatial r 0.22→0.40→0.42; lateral 3/10/30 never raises it and 10+ costs NSE; percolation fraction 0.01 removes a +0.03 bias at no NSE cost, 0.05 collapses NSE to 0.2; any cover above 0 lowers spatial r |
+| MRI | lateral 1, aspect 0, percolation fraction 0 (impermeable base) | −0.025 | 0.30 | 0.62 | – | 0.74 (4 profiles with complete triples) | the subsurface store lifts NSE from −0.64; any leak lowers it (0.22 at 0.01); aspect 0 and 1 score identically, so aspect is untested here; cover 1 raises temporal r to 0.79 but adds +0.04 bias |
+| Esdale | lateral 1, aspect 2, percolation fraction 0.5, cover 4 (relative) | +0.025 | 0.45 | 0.72 | 0.33 | – | a free store with percolation fraction ≤ 0.01 is catastrophic in a 0.1 m layer (bias +0.17, NSE −8); percolation fraction 0.5 returns it to the bucket's level; relative cover 2→4 lifts spatial r −0.13→0.24→0.33; 6 and 8 over-spread |
 | Llara | defaults; nothing chosen | −0.001 | 0.17 | 0.26 | negative | 0.65 | every configuration within NSE 0.10–0.17; the levers are inert on flat ground |
 | SASMAS Stanley | nothing chosen | +0.08–0.09 | negative | ~0.3 | – | ~0.6 | bias +0.08 under all eleven configurations |
 

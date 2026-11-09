@@ -48,6 +48,13 @@ From here each step was chosen from the previous step's measured shortfall; noth
 | 27 | Cover: demand follows each cell's persistent greenness relative to the site's mean | Persistent cover dries Esdale's surface independently of aspect; no cover signal at Tarrawarra |
 | 28 | PRs 22–27 land together on `soil-physics-with-python` | |
 
+## Afterwards
+
+| PR | What landed |
+|---|---|
+| 29 | These pages |
+| 30 | The fluxes named by process: `SUBSURFACE_LATERAL_FLOW` and `PERCOLATION` (with `percolation_fraction`) in place of `DRAINAGE` and `LEAK`, and `SURFACE_FLOW` recorded by the routed and subsurface steps |
+
 What the sites taught in detail, and the settings each ended with, are in [evaluation.md](evaluation.md).
 
 <!-- nav -->

@@ -123,6 +123,7 @@ One page per part of the system. Read them in order for the whole picture, or go
 - [Phase 1: viewer, ingest, model loop, service (PRs 1–13, 27 Oct – 1 Nov)](history.md#phase-1-viewer-ingest-model-loop-service-prs-113-27-oct--1-nov)
 - [Phase 2: soil physics and terrain (PRs 14–19, 4 Nov)](history.md#phase-2-soil-physics-and-terrain-prs-1419-4-nov)
 - [Phase 3: flow, observations, levers, calibration (PRs 20–28, 8 Nov)](history.md#phase-3-flow-observations-levers-calibration-prs-2028-8-nov)
+- [Afterwards](history.md#afterwards)
 
 ## By question
 
