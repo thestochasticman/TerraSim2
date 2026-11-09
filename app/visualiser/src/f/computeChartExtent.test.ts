@@ -9,8 +9,8 @@ describe("computeChartExtent", () => {
     expect(e.maxOut).toBeCloseTo(33.6);
   });
 
-  it("adds drainage and leak to the losses", () => {
-    const e = computeChartExtent({ dates: ["a"], rain: [1], pet: [1], moisture: [1], evaporation: [2], runoff: [1], drainage: [3], leak: [4] });
+  it("adds subsurface lateral flow and percolation to the losses", () => {
+    const e = computeChartExtent({ dates: ["a"], rain: [1], pet: [1], moisture: [1], evaporation: [2], runoff: [1], subsurfaceLateralFlow: [3], percolation: [4] });
     expect(e.maxOut).toBeCloseTo(10.5);
   });
 

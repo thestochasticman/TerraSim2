@@ -15,8 +15,8 @@ class RunRequest(BaseModel):
         ``"routed"`` for buckets whose overflow runs downhill, or
         ``"subsurface"`` for buckets with a free store that drains
         downslope through the soil.
-    leak_fraction : float, dimensionless
-        ``SubsurfaceBucketParams.leak_fraction``, in [0, 1]. Subsurface step only.
+    percolation_fraction : float, dimensionless
+        ``SubsurfaceBucketParams.percolation_fraction``, in [0, 1]. Subsurface step only.
     rain_hours : float, hours
         ``SubsurfaceBucketParams.rain_hours``, positive. Subsurface step only.
     lateral_multiplier : float, dimensionless
@@ -55,7 +55,7 @@ class RunRequest(BaseModel):
     stress_exponent: float = Field(default=1.0, gt=0)
     initial_fullness: float = Field(default=0.5, ge=0, le=1)
     root_depth: float = Field(default=0.3, gt=0)
-    leak_fraction: float = Field(default=0.0, ge=0, le=1)
+    percolation_fraction: float = Field(default=0.0, ge=0, le=1)
     rain_hours: float = Field(default=24.0, gt=0)
     lateral_multiplier: float = Field(default=1.0, gt=0)
     aspect_strength: float = Field(default=0.0, ge=0)
@@ -70,14 +70,14 @@ def t():
     """Defaults apply, fields validate, and the model round-trips through JSON."""
     r = RunRequest(stub="tarrawarra")
     assert r.stress_exponent == 1.0 and r.initial_fullness == 0.5 and r.write_every_days == 1 and r.root_depth == 0.3 and r.step == "bucket"
-    assert RunRequest(stub="x", step="routed").step == "routed" and r.leak_fraction == 0.0 and r.rain_hours == 24.0
-    assert RunRequest(stub="x", step="subsurface", leak_fraction=0.5, rain_hours=6).rain_hours == 6
+    assert RunRequest(stub="x", step="routed").step == "routed" and r.percolation_fraction == 0.0 and r.rain_hours == 24.0
+    assert RunRequest(stub="x", step="subsurface", percolation_fraction=0.5, rain_hours=6).rain_hours == 6
     assert r.lateral_multiplier == 1.0 and RunRequest(stub="x", lateral_multiplier=30).lateral_multiplier == 30
     assert r.tree_root_depth is None and RunRequest(stub="x", tree_root_depth=1.5).tree_root_depth == 1.5
     assert r.aspect_strength == 0.0 and RunRequest(stub="x", aspect_strength=1).aspect_strength == 1
     assert r.cover_strength == 0.0 and RunRequest(stub="x", cover_strength=0.5).cover_strength == 0.5
     assert RunRequest.model_validate_json(r.model_dump_json()) == r
-    for bad in (dict(stub=""), dict(stub="x", stress_exponent=0), dict(stub="x", initial_fullness=1.5), dict(stub="x", write_every_days=0), dict(stub="x", root_depth=0), dict(stub="x", step="darcy"), dict(stub="x", leak_fraction=2), dict(stub="x", rain_hours=0), dict(stub="x", lateral_multiplier=0), dict(stub="x", tree_root_depth=0), dict(stub="x", aspect_strength=-1), dict(stub="x", cover_strength=-0.1)):
+    for bad in (dict(stub=""), dict(stub="x", stress_exponent=0), dict(stub="x", initial_fullness=1.5), dict(stub="x", write_every_days=0), dict(stub="x", root_depth=0), dict(stub="x", step="darcy"), dict(stub="x", percolation_fraction=2), dict(stub="x", rain_hours=0), dict(stub="x", lateral_multiplier=0), dict(stub="x", tree_root_depth=0), dict(stub="x", aspect_strength=-1), dict(stub="x", cover_strength=-0.1)):
         try:
             RunRequest(**bad)
         except ValueError:

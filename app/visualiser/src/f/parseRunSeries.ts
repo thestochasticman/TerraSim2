@@ -1,7 +1,16 @@
 import type { RunSeries } from "@/t/RunSeries";
 
 const REQUIRED = ["rain", "pet", "moisture"] as const;
-const OPTIONAL = ["infiltration", "runoff", "evaporation", "inflow", "drainage", "leak"] as const;
+/** Optional series: the key the service sends (the store's flux name) and the field it fills. */
+const OPTIONAL: [string, "infiltration" | "runoff" | "evaporation" | "inflow" | "surfaceFlow" | "subsurfaceLateralFlow" | "percolation"][] = [
+  ["infiltration", "infiltration"],
+  ["runoff", "runoff"],
+  ["evaporation", "evaporation"],
+  ["inflow", "inflow"],
+  ["surface_flow", "surfaceFlow"],
+  ["subsurface_lateral_flow", "subsurfaceLateralFlow"],
+  ["percolation", "percolation"],
+];
 
 /**
  * Turn the service's series JSON into a RunSeries, checking every list has one value per date.
@@ -25,8 +34,8 @@ export function parseRunSeries(data: unknown): RunSeries {
   for (const key of REQUIRED) {
     out[key] = readNumbers(obj, key, n);
   }
-  for (const key of OPTIONAL) {
-    if (obj[key] !== undefined) out[key] = readNumbers(obj, key, n);
+  for (const [key, field] of OPTIONAL) {
+    if (obj[key] !== undefined) out[field] = readNumbers(obj, key, n);
   }
   return out;
 }
