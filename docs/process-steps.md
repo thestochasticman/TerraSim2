@@ -43,12 +43,12 @@ Finding: under one 5 km rain tile the routed bucket changes nothing against the 
 Two stores per cell: the plant store as before, and above it a free store between field capacity and saturation, `free_capacity` = (θs − θfc) × root depth mm. In one day, per cell, in flow order:
 
 1. **Infiltration.** Rain and inflow from upslope enter up to the room left in both stores and up to the day's infiltration limit, Ks g t_rain (the saturated conductivity in kg s m⁻³ times gravity, over `rain_hours`); the remainder is surface excess.
-2. **Lateral subsurface flow and deep drainage.** Free water moves to the downstream cell by Darcy's law at the Campbell conductivity of its content (eq. 6.35) over the cell's slope, multiplied by `lateral_multiplier` to stand for preferential flow; and leaves the column downward, as deep drainage, by `leak_fraction` of the free store per day (0 is an impermeable base). Both are taken from the free store only; the plant store is depleted by evapotranspiration alone.
-3. **Cascade.** Excess and subsurface flow from the ridges arrive at the cells below within the same day. Water arriving through the soil enters whatever room the receiving cell has, plant store first; water arriving over the surface is also subject to the infiltration limit; what finds no room passes on over the surface, and only outlets shed runoff.
+2. **Drainage and leak.** Free water drains to the downstream cell by Darcy's law at the Campbell conductivity of its content (eq. 6.35) over the cell's slope, multiplied by `lateral_multiplier` to stand for preferential flow; and leaks downward out of the column by `leak_fraction` of the free store per day (0 is an impermeable base). Both are taken from the free store only; the plant store is depleted by evapotranspiration alone.
+3. **Cascade.** Excess and drainage from the ridges arrive at the cells below within the same day. Water arriving through the soil enters whatever room the receiving cell has, plant store first; water arriving over the surface is also subject to the infiltration limit; what finds no room passes on over the surface, and only outlets shed runoff.
 4. **Evapotranspiration.** Reference demand, scaled by the cell's `solar_ratio` to the power `aspect_strength`, times plant-store fullness to the stress exponent.
 
 - Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, leak_fraction=0.0, rain_hours=24.0, lateral_multiplier=1.0, aspect_strength=0.0)`.
-- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION. The code keeps short names: `DRAINAGE` is the lateral subsurface flow and `LEAK` the deep drainage below the roots.
+- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION. In hydrological terms, drainage here is drainage (interflow) and leak is deep drainage below the roots; these pages use the model's names throughout.
 - Requires a retention curve (`SoilHydraulics.require_conductivity()`).
 
 ## Levers outside the step
