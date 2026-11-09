@@ -85,14 +85,14 @@
 
   <!-- lateral drainage -->
   <path d="M 1042 616 C 1170 640, 1290 680, 1416 712" fill="none" stroke="#2a78d6" stroke-width="5" marker-end="url(#arrow-blue)"/>
-  <text x="1100" y="730" font-size="28" font-weight="600">Lateral drainage</text>
+  <text x="1060" y="730" font-size="28" font-weight="600">Lateral subsurface flow</text>
 
   <!-- inflow -->
   <text x="1505" y="648" font-size="22" font-weight="600" text-anchor="middle" fill="#44525a">Inflow</text>
 
   <!-- leak -->
   <line x1="1505" y1="902" x2="1505" y2="966" stroke="#17262b" stroke-width="5" marker-end="url(#arrow-ink)"/>
-  <text x="1530" y="945" font-size="28" font-weight="600">Leak</text>
+  <text x="1530" y="945" font-size="28" font-weight="600">Deep drainage</text>
 
   <!-- stores, named once -->
   <text x="425" y="490" font-size="20" text-anchor="middle" fill="#44525a">free store</text>
