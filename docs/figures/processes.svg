@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" font-family="IBM Plex Sans, Segoe UI, Helvetica, Arial, sans-serif" fill="#17262b">
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2a78d6"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c9772b"/>
+    </marker>
+    <marker id="arrow-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#17262b"/>
+    </marker>
+    <clipPath id="ground"><path d="M 80 430 C 500 430, 700 480, 960 560 S 1500 680, 1840 690 L 1840 980 L 80 980 Z"/></clipPath>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#f7f6f1"/>
+
+  <!-- title -->
+  <text x="80" y="110" font-family="Source Serif 4, Georgia, serif" font-size="52" font-weight="600">Interpretable methods for modelling soil moisture</text>
+
+  <!-- sun and rain -->
+  <circle cx="640" cy="250" r="34" fill="#f0b27a"/>
+  <g stroke="#f0b27a" stroke-width="4" stroke-linecap="round">
+    <line x1="640" y1="198" x2="640" y2="180"/><line x1="640" y1="302" x2="640" y2="320"/>
+    <line x1="588" y1="250" x2="570" y2="250"/><line x1="692" y1="250" x2="710" y2="250"/>
+    <line x1="603" y1="213" x2="590" y2="200"/><line x1="677" y1="287" x2="690" y2="300"/>
+    <line x1="603" y1="287" x2="590" y2="300"/><line x1="677" y1="213" x2="690" y2="200"/>
+  </g>
+  <g fill="#d6dde3">
+    <circle cx="1010" cy="265" r="38"/><circle cx="1062" cy="243" r="50"/><circle cx="1124" cy="262" r="40"/><rect x="1010" y="262" width="114" height="42"/>
+  </g>
+  <g stroke="#2a78d6" stroke-width="3" stroke-linecap="round">
+    <line x1="1000" y1="322" x2="992" y2="350"/><line x1="1036" y1="328" x2="1028" y2="356"/><line x1="1072" y1="322" x2="1064" y2="350"/><line x1="1108" y1="328" x2="1100" y2="356"/>
+    <line x1="1016" y1="372" x2="1008" y2="400"/><line x1="1052" y1="378" x2="1044" y2="406"/><line x1="1088" y1="372" x2="1080" y2="400"/>
+  </g>
+
+  <!-- ground -->
+  <path d="M 80 430 C 500 430, 700 480, 960 560 S 1500 680, 1840 690 L 1840 980 L 80 980 Z" fill="#e6dfca"/>
+  <path d="M 80 430 C 500 430, 700 480, 960 560 S 1500 680, 1840 690" fill="none" stroke="#8a7a58" stroke-width="3"/>
+  <rect x="80" y="900" width="1760" height="80" fill="#cdbf9c" clip-path="url(#ground)"/>
+
+  <!-- grass and a tree -->
+  <g stroke="#8aa64a" stroke-width="3" stroke-linecap="round">
+    <line x1="200" y1="430" x2="196" y2="406"/><line x1="218" y1="430" x2="222" y2="404"/><line x1="236" y1="430" x2="234" y2="408"/>
+    <line x1="700" y1="478" x2="696" y2="454"/><line x1="718" y1="482" x2="722" y2="458"/><line x1="736" y1="486" x2="734" y2="462"/>
+    <line x1="1250" y1="628" x2="1246" y2="604"/><line x1="1268" y1="632" x2="1272" y2="608"/>
+  </g>
+  <rect x="1700" y="616" width="12" height="70" fill="#8a7a58"/>
+  <ellipse cx="1706" cy="596" rx="52" ry="44" fill="#4f8a3a"/>
+
+  <!-- bucket: ridge -->
+  <rect x="340" y="438" width="170" height="340" fill="#ffffff" stroke="#17262b" stroke-width="2.5"/>
+  <rect x="340" y="438" width="170" height="90" fill="#eef4fb"/>
+  <rect x="340" y="660" width="170" height="118" fill="#2a78d6"/>
+  <line x1="340" y1="528" x2="510" y2="528" stroke="#17262b" stroke-width="2" stroke-dasharray="7 5"/>
+  <g font-size="20" fill="#6a7179" text-anchor="end">
+    <text x="326" y="459">saturation</text>
+    <text x="326" y="535">field capacity</text>
+    <text x="326" y="785">wilting point</text>
+  </g>
+
+  <!-- bucket: mid-slope -->
+  <rect x="870" y="548" width="170" height="340" fill="#ffffff" stroke="#17262b" stroke-width="2.5"/>
+  <rect x="870" y="548" width="170" height="90" fill="#eef4fb"/>
+  <rect x="870" y="598" width="170" height="40" fill="#9ec5f4"/>
+  <rect x="870" y="638" width="170" height="250" fill="#2a78d6"/>
+  <line x1="870" y1="638" x2="1040" y2="638" stroke="#17262b" stroke-width="2" stroke-dasharray="7 5"/>
+
+  <!-- bucket: drainage line -->
+  <rect x="1420" y="662" width="170" height="238" fill="#ffffff" stroke="#17262b" stroke-width="2.5"/>
+  <rect x="1420" y="662" width="170" height="90" fill="#9ec5f4"/>
+  <rect x="1420" y="752" width="170" height="148" fill="#2a78d6"/>
+  <line x1="1420" y1="752" x2="1590" y2="752" stroke="#17262b" stroke-width="2" stroke-dasharray="7 5"/>
+
+  <!-- evapotranspiration -->
+  <line x1="425" y1="432" x2="425" y2="300" stroke="#c9772b" stroke-width="5" marker-end="url(#arrow-orange)"/>
+  <text x="425" y="276" font-size="28" font-weight="600" text-anchor="middle">Evapotranspiration</text>
+
+  <!-- infiltration -->
+  <line x1="1060" y1="420" x2="965" y2="544" stroke="#2a78d6" stroke-width="5" marker-end="url(#arrow-blue)"/>
+  <text x="1090" y="470" font-size="28" font-weight="600">Infiltration</text>
+
+  <!-- runoff -->
+  <path d="M 1050 556 C 1160 590, 1280 630, 1412 668" fill="none" stroke="#c9772b" stroke-width="5" marker-end="url(#arrow-orange)"/>
+  <text x="1190" y="572" font-size="28" font-weight="600">Runoff</text>
+
+  <!-- lateral drainage -->
+  <path d="M 1042 616 C 1170 640, 1290 680, 1416 712" fill="none" stroke="#2a78d6" stroke-width="5" marker-end="url(#arrow-blue)"/>
+  <text x="1100" y="730" font-size="28" font-weight="600">Lateral drainage</text>
+
+  <!-- inflow -->
+  <text x="1505" y="648" font-size="22" font-weight="600" text-anchor="middle" fill="#44525a">Inflow</text>
+
+  <!-- leak -->
+  <line x1="1505" y1="902" x2="1505" y2="966" stroke="#17262b" stroke-width="5" marker-end="url(#arrow-ink)"/>
+  <text x="1530" y="945" font-size="28" font-weight="600">Leak</text>
+
+  <!-- stores, named once -->
+  <text x="425" y="490" font-size="20" text-anchor="middle" fill="#44525a">free store</text>
+  <text x="425" y="600" font-size="20" text-anchor="middle" fill="#44525a">plant store</text>
+</svg>
