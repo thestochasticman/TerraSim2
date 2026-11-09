@@ -43,12 +43,12 @@ Finding: under one 5 km rain tile the routed bucket changes nothing against the 
 Two stores per cell: the plant store as before, and above it a free store between field capacity and saturation, `free_capacity` = (θs − θfc) × root depth mm. In one day, per cell, in flow order:
 
 1. **Infiltration.** Rain and inflow from upslope enter up to the room left in both stores and up to the day's infiltration limit, Ks g t_rain (the saturated conductivity in kg s m⁻³ times gravity, over `rain_hours`); the remainder is surface excess.
-2. **Drainage.** Free water drains to the downstream cell by Darcy's law at the Campbell conductivity of its content (eq. 6.35) over the cell's slope, multiplied by `lateral_multiplier` to stand for preferential flow; and downward out of the column by `leak_fraction` of the free store per day (0 is an impermeable base).
-3. **Cascade.** Excess and drainage from the ridges arrive at the cells below within the same day; only outlets shed runoff.
+2. **Lateral subsurface flow and deep drainage.** Free water moves to the downstream cell by Darcy's law at the Campbell conductivity of its content (eq. 6.35) over the cell's slope, multiplied by `lateral_multiplier` to stand for preferential flow; and leaves the column downward, as deep drainage, by `leak_fraction` of the free store per day (0 is an impermeable base). Both are taken from the free store only; the plant store is depleted by evapotranspiration alone.
+3. **Cascade.** Excess and subsurface flow from the ridges arrive at the cells below within the same day. Water arriving through the soil enters whatever room the receiving cell has, plant store first; water arriving over the surface is also subject to the infiltration limit; what finds no room passes on over the surface, and only outlets shed runoff.
 4. **Evapotranspiration.** Reference demand, scaled by the cell's `solar_ratio` to the power `aspect_strength`, times plant-store fullness to the stress exponent.
 
 - Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, leak_fraction=0.0, rain_hours=24.0, lateral_multiplier=1.0, aspect_strength=0.0)`.
-- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION.
+- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION. The code keeps short names: `DRAINAGE` is the lateral subsurface flow and `LEAK` the deep drainage below the roots.
 - Requires a retention curve (`SoilHydraulics.require_conductivity()`).
 
 ## Levers outside the step
@@ -60,7 +60,7 @@ Two more levers act through the inputs rather than the step, so they apply to ev
 
 ## What the evaluation made of them
 
-At Tarrawarra the free store is what reaches the observed winter levels (the closed bucket cannot exceed field capacity, 0.30 m³/m³, and falls 0.15 below the surveys); the aspect lever is what organises the pattern within a survey (mean within-survey r 0.16 → 0.42); the lateral multiplier adds nothing at 10 m (0.38 at ×10, and NSE falls at ×10 and beyond); a leak of 0.01 removes a +0.03 bias at no cost to NSE, while 0.05 collapses it. See [evaluation.md](evaluation.md) for every site.
+At Tarrawarra the free store is what reaches the observed winter levels (the closed bucket cannot exceed field capacity, 0.30 m³/m³, and falls 0.15 below the surveys); the aspect lever is what organises the pattern within a survey (mean within-survey r 0.16 → 0.42); the lateral multiplier adds nothing at 10 m (0.38 at ×10, and NSE falls at ×10 and beyond); a leak fraction of 0.01 removes a +0.03 bias at no cost to NSE, while 0.05 collapses it. See [evaluation.md](evaluation.md) for every site.
 
 <!-- nav -->
 ← [Terrain](terrain.md) · [Index](README.md) · [Runs](runs.md) →
