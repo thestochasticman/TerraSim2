@@ -5,7 +5,8 @@
  * rain, pet, moisture : one value per date
  * infiltration, runoff, evaporation : one value per date, absent when the run did not record fluxes
  * inflow : one value per date, water that arrived from upslope; routed and subsurface runs
- * drainage, leak : one value per date, free water that left downslope through the soil, or straight down; subsurface runs
+ * surfaceFlow : one value per date, water passed on over the surface to the downslope cell; routed and subsurface runs
+ * subsurfaceLateralFlow, percolation : one value per date, free water that left downslope through the soil, or straight down out of the root zone; subsurface runs
  */
 export type RunSeries = {
   dates: string[];
@@ -16,6 +17,7 @@ export type RunSeries = {
   runoff?: number[];
   evaporation?: number[];
   inflow?: number[];
-  drainage?: number[];
-  leak?: number[];
+  surfaceFlow?: number[];
+  subsurfaceLateralFlow?: number[];
+  percolation?: number[];
 };

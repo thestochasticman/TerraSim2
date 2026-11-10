@@ -50,7 +50,7 @@ def execute_run(request: RunRequest, inputs_folder: Path, store_folder: Path) ->
     inputs = _prepare_inputs(request, inputs_folder)
     step, flux_enum = STEPS[request.step]
     if request.step == "subsurface":
-        params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, leak_fraction=request.leak_fraction, rain_hours=request.rain_hours, lateral_multiplier=request.lateral_multiplier, aspect_strength=request.aspect_strength)
+        params = SubsurfaceBucketParams(stress_exponent=request.stress_exponent, percolation_fraction=request.percolation_fraction, rain_hours=request.rain_hours, lateral_multiplier=request.lateral_multiplier, aspect_strength=request.aspect_strength)
     else:
         params = BucketModelParams(stress_exponent=request.stress_exponent)
     run_model(
@@ -107,11 +107,11 @@ def t():
     import zarr
 
     routed = execute_run(RunRequest(stub="example", step="routed", write_every_days=31), find_inputs("example"), Path(tempfile.mkdtemp()) / "routed.zarr")
-    assert load_run_result(routed).n_fluxes == 4
-    assert zarr.open_group(routed, mode="r").attrs["flux_names"] == ["infiltration", "inflow", "runoff", "evaporation"]
+    assert load_run_result(routed).n_fluxes == 5
+    assert zarr.open_group(routed, mode="r").attrs["flux_names"] == ["infiltration", "inflow", "surface_flow", "runoff", "evaporation"]
     subsurface = execute_run(RunRequest(stub="example", step="subsurface", rain_hours=6, write_every_days=31), find_inputs("example"), Path(tempfile.mkdtemp()) / "subsurface.zarr")
     sub = load_run_result(subsurface)
-    assert sub.n_fluxes == 6 and zarr.open_group(subsurface, mode="r").attrs["flux_names"][3] == "leak"
+    assert sub.n_fluxes == 7 and zarr.open_group(subsurface, mode="r").attrs["flux_names"][4] == "percolation"
     assert np.isfinite(sub.get_moisture(30)).all()
     treed = _prepare_inputs(RunRequest(stub="tarrawarra", root_depth=0.3, tree_root_depth=1.0), find_inputs("tarrawarra"))
     assert isinstance(treed.root_depth, np.ndarray) and set(np.unique(treed.root_depth)) == {0.3, 1.0}, "tree cells take the tree depth"

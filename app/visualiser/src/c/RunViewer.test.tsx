@@ -113,17 +113,17 @@ describe("RunViewer", () => {
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "routed" })));
   });
 
-  it("the subsurface model shows its leak and rain-hours fields and sends them", async () => {
+  it("the subsurface model shows its percolation and rain-hours fields and sends them", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));
-    expect(screen.queryByLabelText("leak fraction")).toBeNull();
+    expect(screen.queryByLabelText("percolation fraction")).toBeNull();
     fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
-    fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
+    fireEvent.change(screen.getByLabelText("percolation fraction"), { target: { value: "0.2" } });
     fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
     fireEvent.change(screen.getByLabelText("lateral multiplier"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText("aspect strength"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", percolationFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
   });
 
   it("the cover strength is 0 until set and goes into the request for any model", async () => {

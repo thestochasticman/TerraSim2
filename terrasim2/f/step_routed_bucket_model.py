@@ -22,8 +22,8 @@ def step_routed_bucket_model(
     1. Rain fills the room left in each store. What does not fit is excess.
     2. Excess cascades: walking the cells from the ridges down, each cell
        receives what its upslope neighbours passed on, keeps what room it
-       has left, and passes the rest to the cell it drains to. Water
-       reaching an outlet leaves the grid as runoff. The cascade runs to
+       has left, and passes the rest to the cell it drains to, recorded as
+       surface flow. Water reaching an outlet leaves the grid as runoff. The cascade runs to
        completion within the day, since a day is long against the time
        water takes to cross a hillslope.
     3. Evaporation takes ``pet * (fullness ** stress_exponent)``, capped at
@@ -51,8 +51,8 @@ def step_routed_bucket_model(
     -------
     moisture : ndarray (rows, cols), mm
         Store contents at the end of the day.
-    fluxes : ndarray (4, rows, cols), mm
-        Indexed by ``RoutedBucketFlux``: INFILTRATION, INFLOW, RUNOFF, EVAPORATION.
+    fluxes : ndarray (5, rows, cols), mm
+        Indexed by ``RoutedBucketFlux``: INFILTRATION, INFLOW, SURFACE_FLOW, RUNOFF, EVAPORATION.
     """
     capacity = soil_hydraulics.capacity
     room = capacity - moisture
@@ -62,6 +62,7 @@ def step_routed_bucket_model(
     room = capacity.ravel() - wet
     inflow = np.zeros_like(wet)
     arriving = np.zeros_like(wet)
+    surface_flow = np.zeros_like(wet)
     runoff = np.zeros_like(wet)
     downstream = terrain_derivatives.downstream.ravel()
 
@@ -73,6 +74,7 @@ def step_routed_bucket_model(
         if target == NO_OUTLET:
             runoff[cell] = passing
         else:
+            surface_flow[cell] = passing
             arriving[target] += passing
 
     wet = (wet + inflow).reshape(moisture.shape)
@@ -83,6 +85,7 @@ def step_routed_bucket_model(
     fluxes = np.empty((len(RoutedBucketFlux), *moisture.shape), dtype=np.float64)
     fluxes[RoutedBucketFlux.INFILTRATION] = infiltration
     fluxes[RoutedBucketFlux.INFLOW] = inflow.reshape(moisture.shape)
+    fluxes[RoutedBucketFlux.SURFACE_FLOW] = surface_flow.reshape(moisture.shape)
     fluxes[RoutedBucketFlux.RUNOFF] = runoff.reshape(moisture.shape)
     fluxes[RoutedBucketFlux.EVAPORATION] = evaporation
     return wet - evaporation, fluxes
@@ -103,6 +106,7 @@ def t1():
     new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
     assert np.array_equal(new, capacity)
     assert np.array_equal(f[RoutedBucketFlux.RUNOFF], [[0.0, 0.0, 6.0]])
+    assert np.array_equal(f[RoutedBucketFlux.SURFACE_FLOW], [[6.0, 6.0, 0.0]]), "what each cell passed on over the surface; nothing at the outlet"
     assert np.all(f[RoutedBucketFlux.INFLOW] == 0.0)
 
 
@@ -115,6 +119,7 @@ def t2():
     new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, np.zeros((1, 3)), _derivatives(z), BucketModelParams())
     assert np.array_equal(f[RoutedBucketFlux.INFLOW], [[0.0, 4.0, 1.0]])
     assert np.array_equal(f[RoutedBucketFlux.RUNOFF], [[0.0, 0.0, 1.0]])
+    assert np.array_equal(f[RoutedBucketFlux.SURFACE_FLOW], [[6.0, 2.0, 0.0]])
     assert np.array_equal(new, [[10.0, 10.0, 10.0]])
 
 
@@ -143,7 +148,7 @@ def t4():
     rain = np.full((30, 40), 25.0)
     pet = rng.uniform(0, 5, (30, 40))
     new, f = step_routed_bucket_model(moisture, SoilHydraulics(capacity), rain, pet, _derivatives(z), BucketModelParams())
-    assert f.shape == (4, 30, 40) and np.all(f >= 0)
+    assert f.shape == (5, 30, 40) and np.all(f >= 0)
     per_cell = (new - moisture) - (f[RoutedBucketFlux.INFILTRATION] + f[RoutedBucketFlux.INFLOW] - f[RoutedBucketFlux.EVAPORATION])
     assert np.abs(per_cell).max() < 1e-9
     excess_total = (rain - f[RoutedBucketFlux.INFILTRATION]).sum()
