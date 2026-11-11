@@ -21,7 +21,7 @@
 
 /* The scene takes most of the viewport whatever sits below it; the page scrolls to the chart and the comparison. */
 .scene {
-  height: 78vh;
+  height: 64vh;
   min-height: 420px;
 }
 

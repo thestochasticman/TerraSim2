@@ -36,15 +36,10 @@
   font-weight: 600;
 }
 
+/* The table and the scatter side by side from the left, the scatter wrapping under the table when the width runs out. */
 .panels {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1rem 2rem;
-  align-items: start;
-}
-
-@media (max-width: 800px) {
-  .panels {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 3rem;
+  align-items: flex-start;
 }
