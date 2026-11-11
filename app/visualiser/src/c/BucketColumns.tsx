@@ -16,6 +16,8 @@ export const FREE_STORE_COLOUR = "#6fb1f0";
 export const SHELL_COLOUR = "#e3d5b4";
 /** The shell's footprint relative to the fills', slightly inside them so the water's faces are not veiled by the translucent shell. */
 export const SHELL_INSET = 0.96;
+/** The shell's height relative to the column's, so a full fill's top face sits clear of the shell's and the two do not flicker. */
+export const SHELL_HEIGHT_INSET = 0.99;
 
 /**
  * The soil columns under the surface, as three instanced meshes over one unit
@@ -46,7 +48,7 @@ export function BucketColumns({ buckets }: BucketColumnsProps) {
       const top = buckets.tops[i * 3 + 1];
       const z = buckets.tops[i * 3 + 2];
       const total = buckets.plantDepth[i] + buckets.freeDepth[i];
-      place(shell.current as InstancedMesh, i, x, z, top - total, total, buckets.size * SHELL_INSET);
+      place(shell.current as InstancedMesh, i, x, z, top - total + (total * (1 - SHELL_HEIGHT_INSET)) / 2, total * SHELL_HEIGHT_INSET, buckets.size * SHELL_INSET);
       place(plant.current as InstancedMesh, i, x, z, top - total, buckets.plantDepth[i] * buckets.plantFill[i]);
       place(free.current as InstancedMesh, i, x, z, top - buckets.freeDepth[i], buckets.freeDepth[i] * buckets.freeFill[i]);
     }

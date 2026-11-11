@@ -23,8 +23,8 @@ vi.mock("@/c/SeriesChart", () => ({
   ),
 }));
 vi.mock("@/c/TerrainScene", () => ({
-  TerrainScene: ({ grid, moisture, colourBy, fullCapacity, markers, buckets }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array; markers?: { count: number }; buckets?: { count: number; block: number } }) => (
-    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"} data-markers={markers ? markers.count : "none"} data-buckets={buckets ? `${buckets.count}@${buckets.block}` : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
+  TerrainScene: ({ grid, moisture, colourBy, fullCapacity, markers, buckets }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array; markers?: { count: number }; buckets?: { count: number; block: number; plantDepth: Float32Array; freeDepth: Float32Array } }) => (
+    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"} data-markers={markers ? markers.count : "none"} data-buckets={buckets ? `${buckets.count}@${buckets.block}` : "none"} data-depths={buckets ? `${Array.from(buckets.plantDepth).map((v) => v.toFixed(2)).join("|")};${Array.from(buckets.freeDepth).map((v) => v.toFixed(2)).join("|")}` : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
   ),
 }));
 
@@ -110,6 +110,27 @@ describe("RunViewer", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "earth" } });
     expect(screen.getByTestId("scene").dataset.colourBy).toBe("earth");
     expect(screen.queryByTestId("relative-legend")).toBeNull();
+  });
+
+  it("a subsurface run offers a store select that draws the plant store alone or the free store alone on the same scale", async () => {
+    useRun.mockReturnValue({ ...completeRun(), terrain: { ...terrain, capacity: Float64Array.from([40, 80]), freeCapacity: Float64Array.from([20, 40]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "1" } });
+    expect(screen.queryByRole("combobox", { name: "store" })).toBeNull();
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "store" })).toBeTruthy());
+    // the longer side is 10 m: 0.12 x 10 / 120 mm = 0.01 m per mm
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.40|0.80;0.20|0.40");
+    expect(screen.getByTestId("buckets-legend").textContent).toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "store" }), { target: { value: "plant" } });
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.40|0.80;0.00|0.00");
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "store" }), { target: { value: "free" } });
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.00|0.00;0.20|0.40");
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("plant store");
   });
 
   it("a terrain without capacity gives no bucket columns whatever the select says", async () => {

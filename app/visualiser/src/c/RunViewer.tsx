@@ -8,6 +8,7 @@ import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
 import { FREE_STORE_COLOUR, PLANT_STORE_COLOUR } from "@/c/BucketColumns";
 import { buildBucketColumns } from "@/f/buildBucketColumns";
+import { selectBucketStore } from "@/f/selectBucketStore";
 import { buildObservationMarkers } from "@/f/buildObservationMarkers";
 import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
@@ -16,6 +17,7 @@ import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
 import { useRunComparison } from "@/h/useRunComparison";
 import { useRunSeries } from "@/h/useRunSeries";
+import type { BucketStore } from "@/t/BucketStore";
 import type { ColourBy } from "@/t/ColourBy";
 import type { MarkerMode } from "@/t/MarkerMode";
 import type { RunRequest } from "@/t/RunRequest";
@@ -38,7 +40,8 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  * markers coloured by what was observed or by the run's error there, and
  * the comparison below the chart scores the run against them. A buckets
  * select hangs the soil columns under the surface, one per cell or per
- * block of cells, filled by the shown day's water.
+ * block of cells, filled by the shown day's water; a store select shows
+ * both stores, the plant store alone or the free store alone.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
@@ -63,6 +66,7 @@ export function RunViewer() {
   const [colourBy, setColourBy] = useState<ColourBy>("moisture");
   const [markerMode, setMarkerMode] = useState<MarkerMode>("observed");
   const [bucketBlock, setBucketBlock] = useState(0);
+  const [bucketStore, setBucketStore] = useState<BucketStore>("both");
   const error = runError ?? sitesError ?? seriesError ?? comparisonError ?? scrubError;
 
   useEffect(() => {
@@ -106,7 +110,10 @@ export function RunViewer() {
   const ranges = useMemo(() => (pairs ? computeComparisonRanges(pairs) : null), [pairs]);
   const markers = useMemo(() => (terrain && pairs && ranges && shown ? buildObservationMarkers(terrain, pairs, shown.t, markerMode, ranges) : null), [terrain, pairs, ranges, shown, markerMode]);
   const withFreeStore = request?.step === "subsurface";
-  const buckets = useMemo(() => (terrain && shown && bucketBlock > 0 ? buildBucketColumns(terrain, shown.moisture, bucketBlock, withFreeStore) : null), [terrain, shown, bucketBlock, withFreeStore]);
+  const columns = useMemo(() => (terrain && shown && bucketBlock > 0 ? buildBucketColumns(terrain, shown.moisture, bucketBlock, withFreeStore) : null), [terrain, shown, bucketBlock, withFreeStore]);
+  // Only a run with a free store has two stores to choose between; the others always show the plant store.
+  const shownStore: BucketStore = withFreeStore ? bucketStore : "both";
+  const buckets = useMemo(() => (columns ? selectBucketStore(columns, shownStore) : null), [columns, shownStore]);
 
   return (
     <div className={styles.viewer}>
@@ -213,11 +220,25 @@ export function RunViewer() {
             <option value={10}>10 × 10 cells</option>
           </select>
         </label>
+        {buckets && withFreeStore && (
+          <label title="which store the columns show; both are on the same depth scale">
+            store{" "}
+            <select value={bucketStore} onChange={(e) => setBucketStore(e.target.value as BucketStore)} aria-label="store">
+              <option value="both">both stores</option>
+              <option value="plant">plant store</option>
+              <option value="free">free store</option>
+            </select>
+          </label>
+        )}
         {buckets && (
           <span data-testid="buckets-legend">
-            <span className={styles.swatch} style={{ background: PLANT_STORE_COLOUR }} />
-            plant store{" "}
-            {withFreeStore && (
+            {shownStore !== "free" && (
+              <>
+                <span className={styles.swatch} style={{ background: PLANT_STORE_COLOUR }} />
+                plant store{" "}
+              </>
+            )}
+            {withFreeStore && shownStore !== "plant" && (
               <>
                 <span className={styles.swatch} style={{ background: FREE_STORE_COLOUR }} />
                 free store{" "}
