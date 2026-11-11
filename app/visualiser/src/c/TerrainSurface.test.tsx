@@ -33,6 +33,21 @@ describe("TerrainSurface", () => {
     await renderer.unmount();
   });
 
+  it("is opaque by default and translucent without depth writes when given an opacity below 1", async () => {
+    const grid = makeGrid(2, 2, 1, [0, 0, 0, 0]);
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} />);
+    let material = (renderer.scene.findByType("Mesh").instance as Mesh).material as MeshStandardMaterial;
+    expect(material.transparent).toBe(false);
+    expect(material.opacity).toBe(1);
+    expect(material.depthWrite).toBe(true);
+    await renderer.update(<TerrainSurface grid={grid} opacity={0.35} />);
+    material = (renderer.scene.findByType("Mesh").instance as Mesh).material as MeshStandardMaterial;
+    expect(material.transparent).toBe(true);
+    expect(material.opacity).toBe(0.35);
+    expect(material.depthWrite).toBe(false);
+    await renderer.unmount();
+  });
+
   it("rebuilds the geometry when the grid changes", async () => {
     const small = makeGrid(2, 2, 1, [0, 0, 0, 0]);
     const large = makeGrid(4, 4, 1, new Array(16).fill(0));

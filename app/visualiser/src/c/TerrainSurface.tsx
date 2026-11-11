@@ -20,6 +20,8 @@ export type TerrainSurfaceProps = {
   colourBy?: ColourBy;
   /** What moisture is a fraction of, per cell, mm; defaults to the grid's capacity. A step with a free store passes capacity plus free capacity. */
   fullCapacity?: Float64Array;
+  /** The surface's opacity, 0..1; below 1 it is drawn translucent without writing depth, so what hangs under it shows through. Default 1. */
+  opacity?: number;
 };
 
 /** The surface's colour when there is nothing to colour by: an earth tone, RGB in 0..1. */
@@ -37,7 +39,7 @@ export const EARTH_TONE: [number, number, number] = [0x8c / 255, 0x9a / 255, 0x6
  * a shader recompile that nothing triggers, and the surface would show its
  * white base colour; a constant mode avoids that.
  */
-export function TerrainSurface({ grid, moisture, colourBy = "moisture", fullCapacity }: TerrainSurfaceProps) {
+export function TerrainSurface({ grid, moisture, colourBy = "moisture", fullCapacity, opacity = 1 }: TerrainSurfaceProps) {
   const geometry = useMemo(() => {
     const g = createTerrainGeometry(grid);
     g.setAttribute("color", new BufferAttribute(createUniformColours(grid.rows * grid.cols, EARTH_TONE), 3));
@@ -75,7 +77,7 @@ export function TerrainSurface({ grid, moisture, colourBy = "moisture", fullCapa
 
   return (
     <mesh geometry={geometry}>
-      <meshStandardMaterial color="#ffffff" vertexColors side={DoubleSide} />
+      <meshStandardMaterial color="#ffffff" vertexColors side={DoubleSide} transparent={opacity < 1} opacity={opacity} depthWrite={opacity >= 1} />
     </mesh>
   );
 }

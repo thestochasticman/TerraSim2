@@ -6,6 +6,8 @@ import { fetchSites } from "@/api/fetchSites";
 import { ComparisonView } from "@/c/ComparisonView";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
+import { FREE_STORE_COLOUR, PLANT_STORE_COLOUR } from "@/c/BucketColumns";
+import { buildBucketColumns } from "@/f/buildBucketColumns";
 import { buildObservationMarkers } from "@/f/buildObservationMarkers";
 import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
@@ -34,7 +36,9 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  *
  * When the site has observations, the day's points sit on the terrain as
  * markers coloured by what was observed or by the run's error there, and
- * the comparison below the chart scores the run against them.
+ * the comparison below the chart scores the run against them. A buckets
+ * select hangs the soil columns under the surface, one per cell or per
+ * block of cells, filled by the shown day's water.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
@@ -58,6 +62,7 @@ export function RunViewer() {
   const [scrubError, setScrubError] = useState<string | null>(null);
   const [colourBy, setColourBy] = useState<ColourBy>("moisture");
   const [markerMode, setMarkerMode] = useState<MarkerMode>("observed");
+  const [bucketBlock, setBucketBlock] = useState(0);
   const error = runError ?? sitesError ?? seriesError ?? comparisonError ?? scrubError;
 
   useEffect(() => {
@@ -100,6 +105,8 @@ export function RunViewer() {
   }, [terrain, request]);
   const ranges = useMemo(() => (pairs ? computeComparisonRanges(pairs) : null), [pairs]);
   const markers = useMemo(() => (terrain && pairs && ranges && shown ? buildObservationMarkers(terrain, pairs, shown.t, markerMode, ranges) : null), [terrain, pairs, ranges, shown, markerMode]);
+  const withFreeStore = request?.step === "subsurface";
+  const buckets = useMemo(() => (terrain && shown && bucketBlock > 0 ? buildBucketColumns(terrain, shown.moisture, bucketBlock, withFreeStore) : null), [terrain, shown, bucketBlock, withFreeStore]);
 
   return (
     <div className={styles.viewer}>
@@ -196,6 +203,28 @@ export function RunViewer() {
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
           </span>
         )}
+        <label title="soil columns under the surface, one per block of cells, as deep as the soil's capacity and filled by the day's water">
+          buckets{" "}
+          <select value={bucketBlock} onChange={(e) => setBucketBlock(Number(e.target.value))} aria-label="buckets">
+            <option value={0}>hidden</option>
+            <option value={1}>each cell</option>
+            <option value={5}>5 × 5 cells</option>
+            <option value={10}>10 × 10 cells</option>
+          </select>
+        </label>
+        {buckets && (
+          <span data-testid="buckets-legend">
+            <span className={styles.swatch} style={{ background: PLANT_STORE_COLOUR }} />
+            plant store{" "}
+            {withFreeStore && (
+              <>
+                <span className={styles.swatch} style={{ background: FREE_STORE_COLOUR }} />
+                free store{" "}
+              </>
+            )}
+            · a column is as deep as its soil holds
+          </span>
+        )}
         {comparison && (
           <label>
             observations{" "}
@@ -229,7 +258,7 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} buckets={buckets ?? undefined} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
       {comparison && pairs && status && <ComparisonView comparison={comparison} pairs={pairs} day={shown?.t ?? null} dates={status.dates} onSeek={complete ? playback.setDay : undefined} />}
     </div>
