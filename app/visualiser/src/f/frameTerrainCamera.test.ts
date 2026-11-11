@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameTerrainCamera } from "./frameTerrainCamera";
+import { FRAME_DROP, frameTerrainCamera } from "./frameTerrainCamera";
 import type { TerrainGrid } from "@/t/TerrainGrid";
 
 function makeGrid(rows: number, cols: number, cellSize: number, elevation: number[]): TerrainGrid {
@@ -7,15 +7,15 @@ function makeGrid(rows: number, cols: number, cellSize: number, elevation: numbe
 }
 
 describe("frameTerrainCamera", () => {
-  it("targets the grid centre at the mid elevation", () => {
+  it("targets the grid centre, FRAME_DROP spans below the mid elevation", () => {
     const frame = frameTerrainCamera(makeGrid(3, 5, 10, [100, 100, 100, 100, 100, 100, 100, 300, 100, 100, 100, 100, 100, 100, 100]));
-    expect(frame.target).toEqual([20, 200, 10]);
+    expect(frame.target).toEqual([20, 200 - FRAME_DROP * 40, 10]);
   });
 
   it("places the camera one span back and 0.8 spans up from the target", () => {
     const frame = frameTerrainCamera(makeGrid(3, 5, 10, new Array(15).fill(0)));
-    expect(frame.target).toEqual([20, 0, 10]);
-    expect(frame.position).toEqual([20, 32, 50]);
+    expect(frame.target).toEqual([20, -FRAME_DROP * 40, 10]);
+    expect(frame.position).toEqual([20, 32 - FRAME_DROP * 40, 50]);
   });
 
   it("uses the longer side as the span", () => {

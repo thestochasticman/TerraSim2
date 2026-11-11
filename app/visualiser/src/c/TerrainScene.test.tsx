@@ -72,7 +72,7 @@ describe("TerrainScene", () => {
 
   it("orbits around the grid centre and starts the camera framed to the grid", () => {
     render(<TerrainScene grid={grid} />);
-    expect(JSON.parse(screen.getByTestId("orbit").dataset.target ?? "")).toEqual([20, 0, 10]);
-    expect(JSON.parse(screen.getByTestId("canvas").dataset.camera ?? "")).toEqual([20, 32, 50]);
+    expect(JSON.parse(screen.getByTestId("orbit").dataset.target ?? "")).toEqual([20, -6, 10]);
+    expect(JSON.parse(screen.getByTestId("canvas").dataset.camera ?? "")).toEqual([20, 26, 50]);
   });
 });
