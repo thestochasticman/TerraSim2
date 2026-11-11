@@ -27,7 +27,7 @@ export type TerrainSceneProps = {
 };
 
 /** The surface's opacity while bucket columns are shown under it. */
-export const SURFACE_OPACITY_OVER_BUCKETS = 0.35;
+export const SURFACE_OPACITY_OVER_BUCKETS = 0.3;
 
 /**
  * A full 3D scene for one terrain: canvas, camera framed to the grid,

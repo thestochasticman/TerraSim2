@@ -103,6 +103,15 @@ describe("RunViewer", () => {
     expect(screen.queryByTestId("buckets-legend")).toBeNull();
   });
 
+  it("the earth option passes through to the scene with no legend", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "earth" } });
+    expect(screen.getByTestId("scene").dataset.colourBy).toBe("earth");
+    expect(screen.queryByTestId("relative-legend")).toBeNull();
+  });
+
   it("a terrain without capacity gives no bucket columns whatever the select says", async () => {
     useRun.mockReturnValue(completeRun());
     render(<RunViewer />);

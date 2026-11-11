@@ -283,7 +283,7 @@ TerraSim2/
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation": what the terrain surface's colour encodes
+                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation" | "earth": what the terrain surface's colour encodes; earth is the plain tone, for when the buckets carry the water
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
                 ├── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
                 ├── Scores.ts                  # n, observedMean, modelledMean, bias, rmse, ubrmse, r, nse, kge; null where unscorable

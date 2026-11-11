@@ -1,7 +1,7 @@
 import ReactThreeTestRenderer from "@react-three/test-renderer";
 import { type InstancedMesh, Matrix4, type MeshStandardMaterial } from "three";
 import { describe, expect, it } from "vitest";
-import { BucketColumns, FREE_STORE_COLOUR, PLANT_STORE_COLOUR, SHELL_COLOUR } from "./BucketColumns";
+import { BucketColumns, FREE_STORE_COLOUR, PLANT_STORE_COLOUR, SHELL_COLOUR, SHELL_INSET } from "./BucketColumns";
 import type { BucketSet } from "@/t/BucketSet";
 
 // Two columns: the first 0.6 m of plant store under 0.3 m of free store, half the plant store wet;
@@ -43,7 +43,8 @@ describe("BucketColumns", () => {
     for (const mesh of Object.values(meshes)) expect(mesh.count).toBe(2);
     // the shell of column 1 spans 1.8 m down from 108; its plant fill is the full 1.2 m from the bottom; its free fill the lower half of the top 0.6 m
     const shell = placed(meshes[SHELL_COLOUR], 1);
-    expect(shell.width).toBeCloseTo(16, 5);
+    expect(shell.width).toBeCloseTo(16 * SHELL_INSET, 5);
+    expect(placed(meshes[PLANT_STORE_COLOUR], 1).width).toBeCloseTo(16, 5);
     expect(shell.height).toBeCloseTo(1.8, 5);
     expect(shell.y).toBeCloseTo(108 - 0.9, 5);
     const plant = placed(meshes[PLANT_STORE_COLOUR], 1);

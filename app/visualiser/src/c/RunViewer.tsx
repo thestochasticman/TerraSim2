@@ -174,6 +174,7 @@ export function RunViewer() {
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
             {terrain?.vegetation && <option value="vegetation">vegetation, tree or grass</option>}
+            <option value="earth">earth tone, no data</option>
           </select>
         </label>
         {colourBy === "vegetation" && terrain?.vegetationClasses && (

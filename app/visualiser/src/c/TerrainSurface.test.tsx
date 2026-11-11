@@ -33,6 +33,13 @@ describe("TerrainSurface", () => {
     await renderer.unmount();
   });
 
+  it("the earth option keeps the earth tone even with moisture to colour by", async () => {
+    const grid = makeGrid(2, 2, 1, [0, 0, 0, 0], [100, 100, 100, 100]);
+    const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} moisture={Float32Array.from([0, 50, 100, 100])} colourBy="earth" />);
+    expect(isEarthToned(renderer.scene.findByType("Mesh").instance as Mesh)).toBe(true);
+    await renderer.unmount();
+  });
+
   it("is opaque by default and translucent without depth writes when given an opacity below 1", async () => {
     const grid = makeGrid(2, 2, 1, [0, 0, 0, 0]);
     const renderer = await ReactThreeTestRenderer.create(<TerrainSurface grid={grid} />);
@@ -40,10 +47,10 @@ describe("TerrainSurface", () => {
     expect(material.transparent).toBe(false);
     expect(material.opacity).toBe(1);
     expect(material.depthWrite).toBe(true);
-    await renderer.update(<TerrainSurface grid={grid} opacity={0.35} />);
+    await renderer.update(<TerrainSurface grid={grid} opacity={0.3} />);
     material = (renderer.scene.findByType("Mesh").instance as Mesh).material as MeshStandardMaterial;
     expect(material.transparent).toBe(true);
-    expect(material.opacity).toBe(0.35);
+    expect(material.opacity).toBe(0.3);
     expect(material.depthWrite).toBe(false);
     await renderer.unmount();
   });

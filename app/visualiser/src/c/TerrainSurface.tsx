@@ -16,7 +16,7 @@ export type TerrainSurfaceProps = {
   grid: TerrainGrid;
   /** One day's moisture per cell, mm. When given, the surface is coloured by fullness. */
   moisture?: Float32Array;
-  /** "relative" stretches the day's moisture over its own range; "capacity", "upslope" and "vegetation" colour by the grid's fields when it has them. Default "moisture". */
+  /** "relative" stretches the day's moisture over its own range; "capacity", "upslope" and "vegetation" colour by the grid's fields when it has them; "earth" is the plain earth tone whatever is given. Default "moisture". */
   colourBy?: ColourBy;
   /** What moisture is a fraction of, per cell, mm; defaults to the grid's capacity. A step with a free store passes capacity plus free capacity. */
   fullCapacity?: Float64Array;
@@ -54,7 +54,7 @@ export function TerrainSurface({ grid, moisture, colourBy = "moisture", fullCapa
   const byCapacity = colourBy === "capacity" && grid.capacity !== undefined;
   const byUpslope = colourBy === "upslope" && grid.upslopeCells !== undefined;
   const byVegetation = colourBy === "vegetation" && grid.vegetation !== undefined;
-  const byMoisture = !byCapacity && !byUpslope && !byVegetation && moisture !== undefined && moisture.length === grid.rows * grid.cols;
+  const byMoisture = colourBy !== "earth" && !byCapacity && !byUpslope && !byVegetation && moisture !== undefined && moisture.length === grid.rows * grid.cols;
   const relative = colourBy === "relative";
 
   useEffect(() => {
