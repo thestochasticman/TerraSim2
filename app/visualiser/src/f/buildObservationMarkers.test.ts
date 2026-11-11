@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARKER_LIFT, MARKER_RADIUS, buildObservationMarkers } from "./buildObservationMarkers";
+import { MARKER_LIFT, MARKER_RADIUS, SENSOR_COLOUR, buildObservationMarkers } from "./buildObservationMarkers";
 import { mapErrorToColour } from "./mapErrorToColour";
 import { mapMoistureToColour, NO_DATA_COLOUR } from "./mapMoistureToColour";
 import type { RunPairs } from "@/t/RunPairs";
@@ -33,6 +33,12 @@ describe("buildObservationMarkers", () => {
     const error = buildObservationMarkers(grid, pairs, 4, "error", ranges);
     expect(Array.from(error?.colours.slice(0, 3) ?? [])).toEqual(stored(mapErrorToColour(pairs.modelled[0] - pairs.observed[0], 0.1)));
     expect(Array.from(error?.colours.slice(6, 9) ?? [])).toEqual(stored(NO_DATA_COLOUR));
+  });
+
+  it("the sensors mode colours every marker of the day the one red and needs no scale", () => {
+    const m = buildObservationMarkers(grid, pairs, 4, "sensors", { observed: null, errorScale: null });
+    expect(m?.count).toBe(3);
+    for (let k = 0; k < 3; k++) expect(Array.from(m?.colours.slice(k * 3, k * 3 + 3) ?? [])).toEqual(SENSOR_COLOUR.map(Math.fround));
   });
 
   it("gives null for the none mode, a day without observations, or a scale not yet known", () => {

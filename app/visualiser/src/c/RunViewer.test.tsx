@@ -82,6 +82,11 @@ describe("RunViewer", () => {
     expect(screen.getByTestId("error-legend").textContent).toContain("0.10");
     expect(screen.queryByTestId("observed-legend")).toBeNull();
 
+    fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "sensors" } });
+    expect(screen.getByTestId("scene").dataset.markers).toBe("2");
+    expect(screen.getByTestId("sensors-legend").textContent).toBe("2 sensors of the day, in red");
+    expect(screen.queryByTestId("error-legend")).toBeNull();
+
     fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "none" } });
     expect(screen.getByTestId("scene").dataset.markers).toBe("none");
   });

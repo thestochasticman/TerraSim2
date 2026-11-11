@@ -254,6 +254,7 @@ export function RunViewer() {
               <option value="none">hidden</option>
               <option value="observed">observed content</option>
               <option value="error">model minus observed</option>
+              <option value="sensors">sensors, in red</option>
             </select>
           </label>
         )}
@@ -261,6 +262,9 @@ export function RunViewer() {
           <span data-testid="observed-legend">
             observed {ranges.observed.min.toFixed(2)} to {ranges.observed.max.toFixed(2)} m³/m³, light to dark
           </span>
+        )}
+        {comparison && markerMode === "sensors" && markers && (
+          <span data-testid="sensors-legend">{markers.count} sensors of the day, in red</span>
         )}
         {comparison && markerMode === "error" && ranges?.errorScale && (
           <span data-testid="error-legend">
