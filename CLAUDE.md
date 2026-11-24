@@ -200,10 +200,11 @@ TerraSim2/
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
-            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy and observation markers
+            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy, observation markers and bucket columns, the surface translucent over the columns
             │   ├── ObservationMarkers.tsx     # one instanced mesh of spheres above the surface from a MarkerSet; must sit inside a Canvas
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity, drainage or vegetation with colourBy="capacity", "upslope" or "vegetation", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth, tree root depth and cover fields, percolation, rain-hours, lateral-multiplier and aspect fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
+            │   ├── BucketColumns.tsx          # the soil columns under the surface from a BucketSet, three instanced boxes: a translucent shell, the plant store's water, the free store's water; must sit inside a Canvas
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity, drainage or vegetation with colourBy="capacity", "upslope" or "vegetation", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white); an opacity below 1 draws it translucent
+            │   ├── RunViewer.tsx              # site picker, model select, root depth, tree root depth and cover fields, percolation, rain-hours, lateral-multiplier and aspect fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed, sensors in red) that puts the day's markers on the terrain, and the ComparisonView below the chart; a buckets select (hidden, each cell, 5 × 5, 10 × 10 cells) that hangs the soil columns under the surface, filled by the shown day, and for a subsurface run a store select (both, plant store, free store)
             │   ├── RunViewer.module.css
             │   ├── ComparisonView.tsx         # what was paired and how the run is read, the whole-run scores, then ComparisonTable beside ScatterChart
             │   ├── ComparisonView.module.css
@@ -260,6 +261,8 @@ TerraSim2/
             │   ├── selectPairsOnDay.ts        # (pairs, t) -> indices observed on that day
             │   ├── computeComparisonRanges.ts # pairs -> the observed {min, max} and the largest |error|, the marker colour scales fixed over the run
             │   ├── buildObservationMarkers.ts # (grid, pairs, t, mode, ranges) -> MarkerSet: a sphere per observation of the day at its cell, lifted above the surface, coloured by mode
+            │   ├── buildBucketColumns.ts      # (grid, day's moisture, block, withFreeStore) -> BucketSet: one column per block of cells, as deep as the block's total capacity on a shared scale, the plant and free stores filled by the day's water
+            │   ├── selectBucketStore.ts       # (BucketSet, store) -> the set with only the plant store or only the free store drawn, depths on the same scale
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
@@ -281,14 +284,16 @@ TerraSim2/
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation": what the terrain surface's colour encodes
+                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation" | "earth": what the terrain surface's colour encodes; earth is the plain tone, for when the buckets carry the water
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
                 ├── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
                 ├── Scores.ts                  # n, observedMean, modelledMean, bias, rmse, ubrmse, r, nse, kge; null where unscorable
                 ├── RunComparison.ts           # daysWritten, nPoints, nPaired, rootDepth, layers, stations, overall, byDate (date, t), byStation
                 ├── RunPairs.ts                # parallel Float32Array columns: t, row, col, station, observed, modelled
                 ├── MarkerSet.ts               # count, positions (3 per marker, m), colours (RGB per marker), radius (m)
-                └── MarkerMode.ts              # "none" | "observed" | "error": what the observation markers encode
+                ├── BucketSet.ts               # count, block, size (m), tops (3 per column, m), plantDepth and freeDepth (m), plantFill and freeFill (0..1)
+                ├── BucketStore.ts             # "both" | "plant" | "free": which store the bucket columns draw
+                └── MarkerMode.ts              # "none" | "observed" | "error" | "sensors": what the observation markers encode; sensors is the day's points in one plain red
 ```
 
 ### Tests

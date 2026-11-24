@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { MARGIN, SeriesPanel, type BarGroup, type SeriesLine } from "@/c/SeriesPanel";
 import { clampDayRange } from "@/f/clampDayRange";
 import { computeChartExtent } from "@/f/computeChartExtent";
+import { computeSvgScale } from "@/f/computeSvgScale";
 import { pickDay } from "@/f/pickDay";
 import type { RunSeries } from "@/t/RunSeries";
 import styles from "./SeriesChart.module.css";
@@ -90,8 +91,10 @@ export function SeriesChart({ series, day, onSeek }: SeriesChartProps) {
   const legend: { item: SeriesLine; outline?: boolean }[] = [{ item: moisture }, ...gains.map((item) => ({ item })), ...losses.map((item) => ({ item })), ...(surfaceFlow ? [{ item: surfaceFlow, outline: true }] : []), { item: demand, outline: true }];
 
   const dayFromEvent = (e: React.MouseEvent<SVGSVGElement>): number | null => {
+    // The viewBox is drawn scaled and centred inside the element's box, so a mouse position maps through that, not the box width.
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * VIEW_WIDTH - MARGIN.left;
+    const { scale, offsetX } = computeSvgScale(rect.width, rect.height, VIEW_WIDTH, totalHeight);
+    const x = (e.clientX - rect.left - offsetX) / scale - MARGIN.left;
     return pickDay(x, plotWidth, nDays, range);
   };
   const xOf = (d: number) => MARGIN.left + ((d - range[0]) / Math.max(1, range[1] - range[0])) * plotWidth;
