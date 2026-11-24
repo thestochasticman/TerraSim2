@@ -1,5 +1,6 @@
 import numpy as np
 
+from terrasim2.f.cascade_downhill import cascade_downhill
 from terrasim2.f.compute_campbell_conductivity import compute_campbell_conductivity
 from terrasim2.f.compute_flow_direction import NO_OUTLET
 from terrasim2.k.soil_hydraulics import SoilHydraulics
@@ -72,7 +73,7 @@ def step_subsurface_bucket_model(
     pet : ndarray (rows, cols), millimetres (mm)
         Reference evapotranspiration demand for the day, non-negative.
     terrain_derivatives : TerrainDerivatives
-        Reads ``downstream``, ``order``, ``slope`` and the grid's cell
+        Reads ``downstream``, ``flow_levels``, ``slope`` and the grid's cell
         size, and ``solar_ratio`` when ``aspect_strength`` is not 0.
     params : SubsurfaceBucketParams
 
@@ -104,26 +105,8 @@ def step_subsurface_bucket_model(
 
     room = total_capacity.ravel() - total
     remaining_limit = (limit - infiltration).ravel()
-    inflow = np.zeros_like(total)
-    surface = np.zeros_like(total)
-    subsurface = np.zeros_like(total)
-    surface_flow = np.zeros_like(total)
-    runoff = np.zeros_like(total)
-    downstream = terrain_derivatives.downstream.ravel()
-    sent_lateral = lateral_flow.ravel()
-
-    for cell in terrain_derivatives.order:
-        taken_sub = min(subsurface[cell], room[cell])
-        taken_surf = min(surface[cell], room[cell] - taken_sub, remaining_limit[cell])
-        inflow[cell] = taken_sub + taken_surf
-        passing = excess[cell] + surface[cell] - taken_surf + subsurface[cell] - taken_sub
-        target = downstream[cell]
-        if target == NO_OUTLET:
-            runoff[cell] = passing + sent_lateral[cell]
-        else:
-            surface_flow[cell] = passing
-            surface[target] += passing
-            subsurface[target] += sent_lateral[cell]
+    cells, bounds = terrain_derivatives.flow_levels
+    inflow, surface_flow, runoff = cascade_downhill(excess, lateral_flow.ravel(), room, remaining_limit, terrain_derivatives.downstream.ravel(), cells, bounds)
 
     total = (total + inflow).reshape(moisture.shape)
     plant = np.minimum(total, capacity)

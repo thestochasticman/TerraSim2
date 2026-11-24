@@ -3,6 +3,7 @@ from functools import cached_property
 import numpy as np
 
 from terrasim2.f.compute_flow_direction import NO_OUTLET, compute_flow_direction
+from terrasim2.f.compute_flow_levels import compute_flow_levels
 from terrasim2.f.compute_flow_order import compute_flow_order
 from terrasim2.f.compute_slope_aspect import compute_slope_aspect
 from terrasim2.f.compute_solar_ratio import compute_solar_ratio
@@ -43,6 +44,9 @@ class TerrainDerivatives:
         Flat indices, upstream before downstream.
     upslope_cells : ndarray (rows, cols) of int, dimensionless
         Cells draining through each cell, itself included.
+    flow_levels : tuple of ndarray of int, dimensionless
+        ``(cells, bounds)`` from ``compute_flow_levels``: the cells grouped
+        so each group can be stepped at once, upstream groups first.
     surface_slope : ndarray (rows, cols), radians
         The ground's own tilt by central differences, from ``compute_slope_aspect``.
     aspect : ndarray (rows, cols), radians
@@ -83,6 +87,10 @@ class TerrainDerivatives:
     @cached_property
     def upslope_cells(self) -> np.ndarray:
         return compute_upslope_cells(self.downstream, self.order)
+
+    @cached_property
+    def flow_levels(self) -> tuple[np.ndarray, np.ndarray]:
+        return compute_flow_levels(self.downstream, self.order)
 
     @cached_property
     def _tilt(self) -> tuple[np.ndarray, np.ndarray]:

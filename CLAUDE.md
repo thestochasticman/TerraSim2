@@ -71,13 +71,13 @@ TerraSim2/
 │   │   ├── vegetation_thresholds.py # frozen dataclass: tree_low_min, tree_amplitude_max, the NDVI rule that tells trees from grass
 │   │   ├── vegetation_map.py        # what grows on each cell: class_index (0 grass, 1 tree, -1 unknown) and the NDVI low, median, high it came from; FORMAT_VERSION; compute_fraction(class), compute_root_depth(depth per class, unknown depth) -> field, compute_crop_coefficient() -> Kc per cell from the low
 │   │   ├── site_observations.py     # point measurements of volumetric water content on a grid's cells: dates, row, col, station, depth interval, vwc, n; FORMAT_VERSION; select_day, select_layer
-│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells, surface_slope and aspect (the ground's own tilt), solar_ratio (direct sun over a year relative to flat; needs the latitude given at construction)
+│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells, flow_levels (the cells grouped so each group can be stepped at once), surface_slope and aspect (the ground's own tilt), solar_ratio (direct sun over a year relative to flat; needs the latitude given at construction)
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
-│       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill in flow order within the day, recorded as SURFACE_FLOW; only outlets shed runoff
-│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and percolates down by percolation_fraction; rain infiltrates up to K_s g rain_hours; surface excess and subsurface flow cascade in flow order; what a cell passes on over the surface is recorded as SURFACE_FLOW
+│       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill within the day (cascade_downhill), recorded as SURFACE_FLOW; only outlets shed runoff
+│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and percolates down by percolation_fraction; rain infiltrates up to K_s g rain_hours; surface excess and subsurface flow cascade downhill (cascade_downhill); what a cell passes on over the surface is recorded as SURFACE_FLOW
 │       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one SoilHydraulics and one TerrainDerivatives per run; in memory, or blocks into a zarr store with flux_names in its attrs
 │       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/flux_names/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
@@ -104,6 +104,8 @@ TerraSim2/
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
 │       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       ├── compute_flow_levels.py             # (downstream, order) -> (cells, bounds): cells grouped by the longest flow path ending in each, so everything draining into a cell is in an earlier group
+│       ├── cascade_downhill.py                # (excess, lateral, room, limit, downstream, cells, bounds) -> inflow, surface flow, runoff: the within-day cascade a level at a time, the same arithmetic as visiting cells in flow order
 │       ├── compute_slope_aspect.py            # (elevation, cell size) -> the ground's tilt (radians) and the direction it faces (downslope, clockwise from north), by central differences
 │       ├── compute_solar_ratio.py             # (slope, aspect, latitude, days, hours) -> direct clear-sky sun on the tilted ground over a year relative to flat, per cell; 1 on flat ground
 │       ├── write_site_observations.py         # SiteObservations -> folder (manifest.json, observations.npz)
