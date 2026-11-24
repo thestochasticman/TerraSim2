@@ -1,6 +1,6 @@
 import numpy as np
 
-from terrasim2.f.compute_flow_direction import NO_OUTLET
+from terrasim2.f.cascade_downhill import cascade_downhill
 from terrasim2.k.bucket_model_params import BucketModelParams
 from terrasim2.k.routed_bucket_flux import RoutedBucketFlux
 from terrasim2.k.soil_hydraulics import SoilHydraulics
@@ -20,7 +20,7 @@ def step_routed_bucket_model(
     Each cell is a store of size ``soil_hydraulics.capacity``. In order:
 
     1. Rain fills the room left in each store. What does not fit is excess.
-    2. Excess cascades: walking the cells from the ridges down, each cell
+    2. Excess cascades (``cascade_downhill``): walking the cells from the ridges down, each cell
        receives what its upslope neighbours passed on, keeps what room it
        has left, and passes the rest to the cell it drains to, recorded as
        surface flow. Water reaching an outlet leaves the grid as runoff. The cascade runs to
@@ -44,7 +44,7 @@ def step_routed_bucket_model(
     pet : ndarray (rows, cols), millimetres (mm)
         Reference evapotranspiration demand for the day, non-negative.
     terrain_derivatives : TerrainDerivatives
-        Reads ``downstream`` and ``order``.
+        Reads ``downstream`` and ``flow_levels``.
     params : BucketModelParams
 
     Returns
@@ -60,22 +60,10 @@ def step_routed_bucket_model(
     excess = (rain - infiltration).ravel()
     wet = (moisture + infiltration).ravel()
     room = capacity.ravel() - wet
-    inflow = np.zeros_like(wet)
-    arriving = np.zeros_like(wet)
-    surface_flow = np.zeros_like(wet)
-    runoff = np.zeros_like(wet)
-    downstream = terrain_derivatives.downstream.ravel()
-
-    for cell in terrain_derivatives.order:
-        taken = min(arriving[cell], room[cell])
-        inflow[cell] = taken
-        passing = excess[cell] + arriving[cell] - taken
-        target = downstream[cell]
-        if target == NO_OUTLET:
-            runoff[cell] = passing
-        else:
-            surface_flow[cell] = passing
-            arriving[target] += passing
+    cells, bounds = terrain_derivatives.flow_levels
+    no_lateral = np.zeros_like(wet)
+    no_limit = np.full_like(wet, np.inf)
+    inflow, surface_flow, runoff = cascade_downhill(excess, no_lateral, room, no_limit, terrain_derivatives.downstream.ravel(), cells, bounds)
 
     wet = (wet + inflow).reshape(moisture.shape)
     with np.errstate(divide="ignore", invalid="ignore"):
