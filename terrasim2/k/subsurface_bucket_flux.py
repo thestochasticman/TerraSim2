@@ -8,24 +8,26 @@ class SubsurfaceBucketFlux(IntEnum):
 
     INFILTRATION : the cell's own rain that entered its stores
     INFLOW : water that arrived from upslope, over the surface or through the soil, and entered
-    DRAINAGE : free water that left downslope through the soil
-    LEAK : free water that left straight down, out of the root zone
+    SURFACE_FLOW : water the cell passed on over the surface to the cell it drains to; zero at outlets
+    SUBSURFACE_LATERAL_FLOW : free water that left downslope through the soil
+    PERCOLATION : free water that left straight down, out of the root zone
     RUNOFF : water that left the grid at this cell; non-zero only at outlets
     EVAPORATION : water that left the stores to the air
     """
 
     INFILTRATION = 0
     INFLOW = 1
-    DRAINAGE = 2
-    LEAK = 3
-    RUNOFF = 4
-    EVAPORATION = 5
+    SURFACE_FLOW = 2
+    SUBSURFACE_LATERAL_FLOW = 3
+    PERCOLATION = 4
+    RUNOFF = 5
+    EVAPORATION = 6
 
 
 def t():
-    """Six fluxes in declared order, usable directly as array indices."""
+    """Seven fluxes in declared order, usable directly as array indices."""
     import numpy as np
 
-    assert [f.value for f in SubsurfaceBucketFlux] == [0, 1, 2, 3, 4, 5]
-    assert SubsurfaceBucketFlux["LEAK"] is SubsurfaceBucketFlux.LEAK
-    assert np.arange(6 * 2 * 2).reshape(6, 2, 2)[SubsurfaceBucketFlux.RUNOFF][0, 0] == 16
+    assert [f.value for f in SubsurfaceBucketFlux] == [0, 1, 2, 3, 4, 5, 6]
+    assert SubsurfaceBucketFlux["PERCOLATION"] is SubsurfaceBucketFlux.PERCOLATION
+    assert np.arange(7 * 2 * 2).reshape(7, 2, 2)[SubsurfaceBucketFlux.RUNOFF][0, 0] == 20

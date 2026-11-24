@@ -34,9 +34,9 @@ def step_subsurface_bucket_model(
        as the driver (the kinematic approximation), at Campbell's
        conductivity for the cell's content::
 
-           drainage = lateral_multiplier * K(theta) * g * slope * root_depth / cell_size * seconds_per_day
+           lateral_flow = lateral_multiplier * K(theta) * g * slope * root_depth / cell_size * seconds_per_day
 
-       and leaks straight down at ``K(theta) * g * leak_fraction``.
+       and percolates straight down at ``K(theta) * g * percolation_fraction``.
        ``lateral_multiplier`` is the anisotropy of a real hillslope, where
        macropores and layer boundaries carry water along the slope many
        times faster than the matrix does; 1 is the matrix value. Both
@@ -44,19 +44,21 @@ def step_subsurface_bucket_model(
        water. The flow width is taken as one cell size whatever the
        direction; a diagonal neighbour's slope already uses the longer
        distance, so this overstates diagonal flow by at most sqrt(2).
-    3. Excess and drainage cascade from the ridges down. Water arriving
+    3. Excess and lateral flow cascade from the ridges down. Water arriving
        through the soil enters up to the room left; water arriving over
        the surface enters up to the room and the infiltration limit; the
-       rest passes on over the surface, and outlets shed it as runoff.
+       rest passes on over the surface, recorded as surface flow, and
+       outlets shed it as runoff.
     4. Evaporation takes ``demand * (plant fullness ** stress_exponent)``,
        capped at what the cell holds, where the demand is ``pet`` scaled
        by the sun the cell's slope receives relative to flat ground,
        ``solar_ratio ** aspect_strength``; a strength of 0 leaves every
        cell at ``pet``.
 
-    Per cell, ``new - old == infiltration + inflow - drainage - leak -
-    evaporation``. Over the grid, excess plus drainage equals inflow plus
-    runoff.
+    Per cell, ``new - old == infiltration + inflow - subsurface lateral flow
+    - percolation - evaporation``. Over the grid, excess plus lateral flow
+    equals inflow plus runoff. Surface flow is what passed between cells
+    over the surface; it enters neither balance.
 
     Parameters
     ----------
@@ -78,7 +80,7 @@ def step_subsurface_bucket_model(
     -------
     moisture : ndarray (rows, cols), mm
         Water at the end of the day, plant store plus free store.
-    fluxes : ndarray (6, rows, cols), mm
+    fluxes : ndarray (7, rows, cols), mm
         Indexed by ``SubsurfaceBucketFlux``.
     """
     soil_hydraulics.require_conductivity("step_subsurface_bucket_model")
@@ -96,18 +98,19 @@ def step_subsurface_bucket_model(
     free = np.maximum(total - capacity, 0.0)
     theta = soil_hydraulics.theta_fc + free / depth_mm
     conductivity = compute_campbell_conductivity(np.nan_to_num(theta), np.nan_to_num(soil_hydraulics.theta_s, nan=1.0), np.nan_to_num(soil_hydraulics.b, nan=1.0), np.nan_to_num(soil_hydraulics.k_sat))
-    drainage = np.minimum(params.lateral_multiplier * conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
-    leak = np.minimum(conductivity * GRAVITY * params.leak_fraction * SECONDS_PER_DAY, free - drainage)
-    total = (total - drainage - leak).ravel()
+    lateral_flow = np.minimum(params.lateral_multiplier * conductivity * GRAVITY * terrain_derivatives.slope * soil_hydraulics.root_depth / terrain_derivatives.grid.cell_size * SECONDS_PER_DAY, free)
+    percolation = np.minimum(conductivity * GRAVITY * params.percolation_fraction * SECONDS_PER_DAY, free - lateral_flow)
+    total = (total - lateral_flow - percolation).ravel()
 
     room = total_capacity.ravel() - total
     remaining_limit = (limit - infiltration).ravel()
     inflow = np.zeros_like(total)
     surface = np.zeros_like(total)
     subsurface = np.zeros_like(total)
+    surface_flow = np.zeros_like(total)
     runoff = np.zeros_like(total)
     downstream = terrain_derivatives.downstream.ravel()
-    sent_drainage = drainage.ravel()
+    sent_lateral = lateral_flow.ravel()
 
     for cell in terrain_derivatives.order:
         taken_sub = min(subsurface[cell], room[cell])
@@ -116,10 +119,11 @@ def step_subsurface_bucket_model(
         passing = excess[cell] + surface[cell] - taken_surf + subsurface[cell] - taken_sub
         target = downstream[cell]
         if target == NO_OUTLET:
-            runoff[cell] = passing + sent_drainage[cell]
+            runoff[cell] = passing + sent_lateral[cell]
         else:
+            surface_flow[cell] = passing
             surface[target] += passing
-            subsurface[target] += sent_drainage[cell]
+            subsurface[target] += sent_lateral[cell]
 
     total = (total + inflow).reshape(moisture.shape)
     plant = np.minimum(total, capacity)
@@ -131,8 +135,9 @@ def step_subsurface_bucket_model(
     fluxes = np.empty((len(SubsurfaceBucketFlux), *moisture.shape), dtype=np.float64)
     fluxes[SubsurfaceBucketFlux.INFILTRATION] = infiltration
     fluxes[SubsurfaceBucketFlux.INFLOW] = inflow.reshape(moisture.shape)
-    fluxes[SubsurfaceBucketFlux.DRAINAGE] = drainage
-    fluxes[SubsurfaceBucketFlux.LEAK] = leak
+    fluxes[SubsurfaceBucketFlux.SURFACE_FLOW] = surface_flow.reshape(moisture.shape)
+    fluxes[SubsurfaceBucketFlux.SUBSURFACE_LATERAL_FLOW] = lateral_flow
+    fluxes[SubsurfaceBucketFlux.PERCOLATION] = percolation
     fluxes[SubsurfaceBucketFlux.RUNOFF] = runoff.reshape(moisture.shape)
     fluxes[SubsurfaceBucketFlux.EVAPORATION] = evaporation
     return total - evaporation, fluxes
@@ -163,28 +168,29 @@ def t1():
     new, f = step_subsurface_bucket_model(saturated, h, np.zeros((1, 3)), np.zeros((1, 3)), d, SubsurfaceBucketParams())
     expected = 7.2e-4 * 9.81 * 0.1 * 0.3 / 10.0 * 86400
     assert abs(expected - 1.831) < 0.001
-    assert np.allclose(f[F.DRAINAGE], [[expected, expected, 0.0]])
+    assert np.allclose(f[F.SUBSURFACE_LATERAL_FLOW], [[expected, expected, 0.0]])
     assert np.allclose(f[F.INFLOW], [[0.0, expected, 0.0]])
     assert np.allclose(f[F.RUNOFF], [[0.0, 0.0, expected]])
-    assert np.all(f[F.LEAK] == 0.0), "the default base is impermeable"
+    assert np.all(f[F.PERCOLATION] == 0.0), "the default base is impermeable"
+    assert np.allclose(f[F.SURFACE_FLOW], 0.0), "nothing moved over the surface"
     assert np.allclose(new, [[105.0 - expected, 105.0, 105.0]])
 
 
 def t2():
     """At field capacity nothing drains; a free store of 30 mm drains at the conductivity of its content,
-    between the two; a leak fraction of one empties the free store downward within the day."""
+    between the two; a percolation fraction of one empties the free store downward within the day."""
     h = _hydraulics((1, 3))
     d = _derivatives([[2.0, 1.0, 0.0]])
     rain = np.zeros((1, 3))
     _, at_fc = step_subsurface_bucket_model(np.full((1, 3), 45.0), h, rain, rain, d, SubsurfaceBucketParams())
-    assert np.all(at_fc[F.DRAINAGE] == 0.0) and np.all(at_fc[F.INFLOW] == 0.0)
+    assert np.all(at_fc[F.SUBSURFACE_LATERAL_FLOW] == 0.0) and np.all(at_fc[F.INFLOW] == 0.0)
     _, half = step_subsurface_bucket_model(np.full((1, 3), 75.0), h, rain, rain, d, SubsurfaceBucketParams())
     saturated = 7.2e-4 * 9.81 * 0.1 * 0.3 / 10.0 * 86400
     expected = saturated * ((0.25 + 0.1) / 0.45) ** 9
-    assert abs(half[F.DRAINAGE][0, 0] - expected) < 1e-9
-    new, leaky = step_subsurface_bucket_model(np.full((1, 3), 75.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=1.0))
-    assert np.allclose(leaky[F.LEAK] + leaky[F.DRAINAGE], 30.0)
-    gained = half[F.DRAINAGE][0, 0]
+    assert abs(half[F.SUBSURFACE_LATERAL_FLOW][0, 0] - expected) < 1e-9
+    new, leaky = step_subsurface_bucket_model(np.full((1, 3), 75.0), h, rain, rain, d, SubsurfaceBucketParams(percolation_fraction=1.0))
+    assert np.allclose(leaky[F.PERCOLATION] + leaky[F.SUBSURFACE_LATERAL_FLOW], 30.0)
+    gained = half[F.SUBSURFACE_LATERAL_FLOW][0, 0]
     assert np.allclose(new, [[45.0, 45.0 + gained, 45.0 + gained]]), "each cell below the crest keeps what arrived through the soil, having leaked its own"
 
 
@@ -200,6 +206,7 @@ def t3():
     assert np.isclose(storm[F.INFILTRATION][0, 0], limit)
     assert np.isclose(storm[F.INFLOW][0, 1], limit), "the cell below takes the same limit from the run-on"
     assert np.isclose(storm[F.RUNOFF][0, 1], 20.0 - 2 * limit)
+    assert np.isclose(storm[F.SURFACE_FLOW][0, 0], 20.0 - limit) and storm[F.SURFACE_FLOW][0, 1] == 0.0, "the excess passed over the surface; the outlet sheds rather than passes"
     _, allday = step_subsurface_bucket_model(np.zeros((1, 2)), h, rain, np.zeros((1, 2)), d, SubsurfaceBucketParams())
     assert abs(allday[F.INFILTRATION][0, 0] - 14.41) < 0.01
 
@@ -214,11 +221,13 @@ def t4():
     moisture = rng.uniform(0.5, 1.5, (20, 25)) * 45.0
     rain = np.full((20, 25), 40.0)
     pet = rng.uniform(0, 4, (20, 25))
-    new, f = step_subsurface_bucket_model(moisture, h, rain, pet, _derivatives(z), SubsurfaceBucketParams(leak_fraction=0.1, rain_hours=6.0))
-    assert f.shape == (6, 20, 25) and np.all(f >= -1e-12)
-    per_cell = (new - moisture) - (f[F.INFILTRATION] + f[F.INFLOW] - f[F.DRAINAGE] - f[F.LEAK] - f[F.EVAPORATION])
+    d = _derivatives(z)
+    new, f = step_subsurface_bucket_model(moisture, h, rain, pet, d, SubsurfaceBucketParams(percolation_fraction=0.1, rain_hours=6.0))
+    assert f.shape == (7, 20, 25) and np.all(f >= -1e-12)
+    assert np.all(f[F.SURFACE_FLOW][d.downstream == NO_OUTLET] == 0.0), "outlets shed, they do not pass on"
+    per_cell = (new - moisture) - (f[F.INFILTRATION] + f[F.INFLOW] - f[F.SUBSURFACE_LATERAL_FLOW] - f[F.PERCOLATION] - f[F.EVAPORATION])
     assert np.abs(per_cell).max() < 1e-9
-    sent = (rain - f[F.INFILTRATION]).sum() + f[F.DRAINAGE].sum()
+    sent = (rain - f[F.INFILTRATION]).sum() + f[F.SUBSURFACE_LATERAL_FLOW].sum()
     assert abs(sent - f[F.INFLOW].sum() - f[F.RUNOFF].sum()) < 1e-6
     assert np.all(new >= -1e-12) and np.all(new <= 105.0 + 1e-9)
     assert f[F.RUNOFF][1:-1, 1:-1].sum() == 0.0
@@ -241,17 +250,17 @@ def t5():
 
 
 def t6():
-    """The lateral multiplier scales the downslope drainage alone: ten times the matrix value passes ten times
-    the water, the leak is untouched, and the free store still caps what can leave."""
+    """The lateral multiplier scales the downslope lateral flow alone: ten times the matrix value passes ten times
+    the water, the percolation is untouched, and the free store still caps what can leave."""
     h = _hydraulics((1, 3))
     d = _derivatives([[2.0, 1.0, 0.0]])
     rain = np.zeros((1, 3))
-    _, matrix = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01))
-    _, fast = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(leak_fraction=0.01, lateral_multiplier=10.0))
-    assert np.allclose(fast[F.DRAINAGE][0, :2], 10.0 * matrix[F.DRAINAGE][0, :2])
-    assert np.allclose(fast[F.LEAK], matrix[F.LEAK])
+    _, matrix = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(percolation_fraction=0.01))
+    _, fast = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(percolation_fraction=0.01, lateral_multiplier=10.0))
+    assert np.allclose(fast[F.SUBSURFACE_LATERAL_FLOW][0, :2], 10.0 * matrix[F.SUBSURFACE_LATERAL_FLOW][0, :2])
+    assert np.allclose(fast[F.PERCOLATION], matrix[F.PERCOLATION])
     _, capped = step_subsurface_bucket_model(np.full((1, 3), 105.0), h, rain, rain, d, SubsurfaceBucketParams(lateral_multiplier=1000.0))
-    assert np.allclose(capped[F.DRAINAGE][0, :2], 60.0), "no more than the free store"
+    assert np.allclose(capped[F.SUBSURFACE_LATERAL_FLOW][0, :2], 60.0), "no more than the free store"
 
 
 def t7():

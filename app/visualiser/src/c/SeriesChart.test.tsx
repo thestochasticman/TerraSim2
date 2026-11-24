@@ -47,10 +47,10 @@ describe("SeriesChart", () => {
     expect(outlines[0].getAttribute("fill")).toBe("none");
   });
 
-  it("stacks drainage and leak with the losses when the run has them", () => {
-    const { container } = render(<SeriesChart series={{ ...series, drainage: [0, 1, 1, 1, 0], leak: [0, 0, 1, 0, 0] }} day={1} />);
-    expect(container.querySelectorAll('rect[data-series="drainage"]')).toHaveLength(5);
-    expect(container.querySelectorAll('rect[data-series="leak"]')).toHaveLength(5);
+  it("stacks subsurface lateral flow and percolation with the losses when the run has them", () => {
+    const { container } = render(<SeriesChart series={{ ...series, subsurfaceLateralFlow: [0, 1, 1, 1, 0], percolation: [0, 0, 1, 0, 0] }} day={1} />);
+    expect(container.querySelectorAll('rect[data-series="subsurfaceLateralFlow"]')).toHaveLength(5);
+    expect(container.querySelectorAll('rect[data-series="percolation"]')).toHaveLength(5);
   });
 
   it("stacks inflow on rain when the run has it", () => {

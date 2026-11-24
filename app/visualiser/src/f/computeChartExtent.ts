@@ -10,15 +10,15 @@ import type { RunSeries } from "@/t/RunSeries";
  *   maxMoisture : top of the stored-water panel
  *   maxIn : top of the flux panel's upward side, the largest daily rain plus inflow
  *   maxOut : depth of the flux panel's downward side, the larger of the
- *            largest daily demand and the largest evaporation plus runoff plus drainage plus leak
+ *            largest daily demand, the largest evaporation plus runoff plus subsurface lateral flow plus percolation, and the largest surface flow
  */
 export function computeChartExtent(series: RunSeries): { maxMoisture: number; maxIn: number; maxOut: number } {
   const n = series.dates.length;
   let out = 0;
   let gained = 0;
   for (let t = 0; t < n; t++) {
-    const lost = (series.evaporation?.[t] ?? 0) + (series.runoff?.[t] ?? 0) + (series.drainage?.[t] ?? 0) + (series.leak?.[t] ?? 0);
-    out = Math.max(out, series.pet[t] ?? 0, lost);
+    const lost = (series.evaporation?.[t] ?? 0) + (series.runoff?.[t] ?? 0) + (series.subsurfaceLateralFlow?.[t] ?? 0) + (series.percolation?.[t] ?? 0);
+    out = Math.max(out, series.pet[t] ?? 0, lost, series.surfaceFlow?.[t] ?? 0);
     gained = Math.max(gained, (series.rain[t] ?? 0) + (series.inflow?.[t] ?? 0));
   }
   return {

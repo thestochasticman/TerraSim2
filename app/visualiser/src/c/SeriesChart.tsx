@@ -21,8 +21,9 @@ export const SERIES_COLOURS = {
   evaporation: "#199e70",
   runoff: "#c98500",
   inflow: "#b5479b",
-  drainage: "#4f8fc6",
-  leak: "#8a8a8a",
+  surfaceFlow: "#8c6a3f",
+  subsurfaceLateralFlow: "#4f8fc6",
+  percolation: "#8a8a8a",
 } as const;
 
 export type SeriesChartProps = {
@@ -44,9 +45,11 @@ const CLICK_TOLERANCE_DAYS = 2;
  * Two stacked panels sharing an x axis. Above, grid-mean stored water, a
  * level in mm, as a line. Below, the daily fluxes in mm per day as bars
  * from a zero line: rain upward with inflow from upslope stacked on it,
- * evaporation, runoff, drainage and leak stacked downward,
- * with demand outlined behind evaporation as the ceiling it could have
- * reached. A vertical marker shows the scrubber's day; hovering previews
+ * evaporation, runoff, subsurface lateral flow and percolation stacked
+ * downward, with demand outlined behind evaporation as the ceiling it
+ * could have reached, and surface flow outlined beside them: water that
+ * passed between cells over the surface, which is neither a gain nor a
+ * loss of the grid's stores. A vertical marker shows the scrubber's day; hovering previews
  * a day in the legend; clicking seeks to it.
  *
  * Zoom: drag across either panel to show just that span of days; double
@@ -73,16 +76,18 @@ export function SeriesChart({ series, day, onSeek }: SeriesChartProps) {
   const losses: SeriesLine[] = [
     ...(series.evaporation ? [{ key: "evaporation", label: "evaporation", colour: SERIES_COLOURS.evaporation, values: series.evaporation }] : []),
     ...(series.runoff ? [{ key: "runoff", label: "runoff", colour: SERIES_COLOURS.runoff, values: series.runoff }] : []),
-    ...(series.drainage ? [{ key: "drainage", label: "drainage", colour: SERIES_COLOURS.drainage, values: series.drainage }] : []),
-    ...(series.leak ? [{ key: "leak", label: "leak", colour: SERIES_COLOURS.leak, values: series.leak }] : []),
+    ...(series.subsurfaceLateralFlow ? [{ key: "subsurfaceLateralFlow", label: "subsurface lateral flow", colour: SERIES_COLOURS.subsurfaceLateralFlow, values: series.subsurfaceLateralFlow }] : []),
+    ...(series.percolation ? [{ key: "percolation", label: "percolation", colour: SERIES_COLOURS.percolation, values: series.percolation }] : []),
   ];
+  const surfaceFlow: SeriesLine | null = series.surfaceFlow ? { key: "surfaceFlow", label: "surface flow", colour: SERIES_COLOURS.surfaceFlow, values: series.surfaceFlow } : null;
   const fluxGroups: BarGroup[] = [
     { direction: "up", stack: gains },
     { direction: "down", stack: losses, outline: demand },
+    ...(surfaceFlow ? [{ direction: "down" as const, stack: [], outline: surfaceFlow }] : []),
   ];
 
   const shownDay = hoverDay ?? day;
-  const legend: { item: SeriesLine; outline?: boolean }[] = [{ item: moisture }, ...gains.map((item) => ({ item })), ...losses.map((item) => ({ item })), { item: demand, outline: true }];
+  const legend: { item: SeriesLine; outline?: boolean }[] = [{ item: moisture }, ...gains.map((item) => ({ item })), ...losses.map((item) => ({ item })), ...(surfaceFlow ? [{ item: surfaceFlow, outline: true }] : []), { item: demand, outline: true }];
 
   const dayFromEvent = (e: React.MouseEvent<SVGSVGElement>): number | null => {
     const rect = e.currentTarget.getBoundingClientRect();

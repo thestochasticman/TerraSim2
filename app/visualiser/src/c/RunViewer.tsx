@@ -43,7 +43,7 @@ export function RunViewer() {
   const [rootDepth, setRootDepth] = useState(0.3);
   const [treeRootDepth, setTreeRootDepth] = useState<number | null>(null);
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
-  const [leakFraction, setLeakFraction] = useState(0);
+  const [percolationFraction, setPercolationFraction] = useState(0);
   const [rainHours, setRainHours] = useState(24);
   const [lateralMultiplier, setLateralMultiplier] = useState(1);
   const [aspectStrength, setAspectStrength] = useState(0);
@@ -83,7 +83,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, percolationFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -125,8 +125,8 @@ export function RunViewer() {
         {step === "subsurface" && (
           <>
             <label>
-              leak{" "}
-              <input type="number" min={0} max={1} step={0.05} value={leakFraction} onChange={(e) => setLeakFraction(Number(e.target.value))} aria-label="leak fraction" className={styles.depth} />
+              percolation{" "}
+              <input type="number" min={0} max={1} step={0.05} value={percolationFraction} onChange={(e) => setPercolationFraction(Number(e.target.value))} aria-label="percolation fraction" className={styles.depth} />
             </label>
             <label>
               rain hours{" "}
