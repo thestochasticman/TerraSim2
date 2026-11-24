@@ -6,52 +6,55 @@
 
 ## Environment
 
-Python 3.12 or later in the lab's `borevitz_lab` conda environment, which carries the lab packages the ingest needs (`troi`, `pysilo`, `pycopdem`, `pyslga`, `pysentinel2`). `terrasim2` itself needs NumPy, and zarr for run stores; `app/api` adds FastAPI and uvicorn. The viewer needs Node (`npm install` in `app/visualiser`).
+- **Python.** The lab's `borevitz_lab` conda environment, currently Python 3.11.15. `CLAUDE.md` asks for Python 3.12 syntax; the code uses no feature beyond 3.11 and runs in this environment.
+- **Ingest.** `troi_ingest` needs the lab packages `troi`, `pysilo`, `pycopdem`, `pyslga` and `pysentinel2`, plus `rasterio` and `pandas`.
+- **Model.** `terrasim2` needs NumPy, and zarr for run stores.
+- **Service.** `app/api` adds FastAPI, pydantic and uvicorn.
+- **Viewer.** Node, run in `app/visualiser` after `npm install`. Node 22.23 is in use, with Next.js 16.4.3, React 19.3 and three.js 0.186.
 
-Run everything from the repository root.
+There is no lock file for the Python dependencies and no environment specification in the repository. Run every command from the repository root unless stated otherwise.
 
 ## Tests
 
-Every Python unit file defines `t()`; the runners find files, import them and call it.
+Every Python unit file defines `t()`, which raises `AssertionError` on failure.
 
 ```
-python tests.py --all             # terrasim2: every file
-python tests.py <file>            # one file
-python tests.py                   # only files edited since they last passed (hash cache in .tests_cache.json)
-python tests.py --watch           # keep running: rerun a file in a fresh subprocess when it is saved; a: all, q: quit
-python troi_ingest/tests.py --all # PASS / SKIP / FAIL; SKIP where a store is not reachable
-python app/api/tests.py --all
-cd app/visualiser && npm test     # vitest; `npm run test:changed` runs only files edited since the last commit
+python tests.py --all              # terrasim2: every file
+python tests.py <file> [...]       # given files
+python tests.py                    # files changed since they last passed (hash cache in .tests_cache.json)
+python tests.py --watch            # re-run a file in a subprocess when it is saved; a: all, q: quit
+python troi_ingest/tests.py --all  # PASS / SKIP / FAIL; SKIP where a store is unreachable
+python app/api/tests.py --all      # PASS / SKIP / FAIL
+cd app/visualiser && npm test      # vitest
 ```
 
-A file's hash is recorded only when its `t()` passes, so `tests.py` without arguments is the counterpart of `vitest --changed`.
+A file's hash is recorded only when its `t()` passes. On 24 November 2026, with the code at `4f45710`, all 64 `terrasim2` files and all 21 `app/api` files passed.
+
+No continuous integration runs these tests. Tests confirm each unit's behaviour on small hand-computed or random cases. Physical correctness rests on the cited equations and on the evaluation in [evaluation.md](evaluation.md).
 
 ## Branches and pull requests
 
-- Work goes on feature branches with one pull request each. There is no `dev` branch.
-- `main` is the release line. `soil-physics-with-python` is a long-lived branch for programming modules of *Soil Physics with Python*; work for it goes on branches off it, with one pull request each into it. The model, evaluation and lever work of November 2026 landed there (PRs 14–28).
-- Each pull request's description records what was measured, so the branch history doubles as the evaluation log ([history.md](history.md)).
+- Work goes on feature branches, one pull request each.
+- `main` received pull requests 1 to 13 and 31.
+- `soil-physics-with-python` is a long-lived branch for work following *Soil Physics with Python*. It received pull requests 14 to 28. Work for it branches from it and returns to it by pull request.
+- There is no `dev` branch and there are no release tags.
 
 ## Conventions
 
-The rules in [overview.md](overview.md) are enforced by review, not tooling: one unit per file, verbs for functions, units in docstrings, a `t()` in every file, no bundling. `CLAUDE.md` at the root is the compact statement of them, with the current tree; keep it current when adding a file.
+The conventions in [overview.md](overview.md) are enforced by review only. `CLAUDE.md` states them and lists the file tree. Update the tree when adding a file.
 
 ## Regenerating the committed data
 
-`data/dev_sites/` holds about 17 MB of prepared inputs, observations and vegetation maps. Regenerate when the inputs' format version, the site table or the observation file changes:
+`data/dev_sites/` holds 27 MB of inputs, observations and vegetation maps. Regenerate them when a format version, `data/dense_sites.csv` or the compiled observation file changes. This needs the lab's stores.
 
 ```
-python -m troi_ingest.f.ingest_sites                 # every site in data/dense_sites.csv → {out_dir}/{stub}/model_inputs
-python -m troi_ingest.f.ingest_site_observations     # every site with observations → {out_dir}/{stub}/observations
-python -m troi_ingest.f.ingest_site_vegetation       # every site → {out_dir}/{stub}/vegetation
+python -m troi_ingest.f.ingest_sites                 # inputs      → {out_dir}/{stub}/model_inputs
+python -m troi_ingest.f.ingest_site_observations     # observations → {out_dir}/{stub}/observations
+python -m troi_ingest.f.ingest_site_vegetation       # vegetation  → {out_dir}/{stub}/vegetation
 ```
 
-then copy the folders into `data/dev_sites/{stub}/`. The example region's inputs (`example`) are regenerated the same way from its own `Troi`. Bump `ModelInputs.FORMAT_VERSION` (or the observations' or vegetation map's) whenever the layout changes; the loaders refuse other versions.
+Then copy the folders into `data/dev_sites/{stub}/` by hand. When a layout changes, increase the relevant `FORMAT_VERSION`; the loaders refuse other versions.
 
-## Evaluating a site
+## Evaluation scripts
 
-The evaluation scripts that produced the settings and scores in [evaluation.md](evaluation.md) are not part of the package; they run the steps directly on a committed site and score the result. The service's comparison route and the viewer's comparison panel are the in-product equivalent, with the differences noted in [observations.md](observations.md).
-
-<!-- nav -->
-← [Visualiser](visualiser.md) · [Index](README.md) · [History](history.md) →
-<!-- /nav -->
+The scripts that produced [evaluation.md](evaluation.md) and the figures in `docs/figures/` are not in the repository. The service's comparison route is the only scoring path in the repository, and it differs from the evaluation as described in [service.md](service.md).

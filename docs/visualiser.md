@@ -4,55 +4,59 @@
 ← [Service](service.md) · [Index](README.md) · [Development](development.md) →
 <!-- /nav -->
 
-`app/visualiser` is a Next.js + TypeScript viewer. It talks only to the service, through `/api/*` on its own origin, which `next.config.ts` rewrites to the service's port (`TERRASIM2_API_URL`, default `http://127.0.0.1:8000`). `src/api/` is the only place `fetch` is called, one wrapper per route.
+`app/visualiser` is a Next.js and TypeScript viewer. It calls only the service, through `/api/*` on its own origin. `next.config.ts` rewrites these calls to `TERRASIM2_API_URL` (default `http://127.0.0.1:8000`). `src/api/` is the only place `fetch` is called, with one wrapper per route.
 
-## Run
+## Commands
+
+Run these in `app/visualiser`:
 
 ```
-npm run dev        # the viewer alone, against a service already running
-npm run dev:all    # scripts/dev.mjs starts python -m app.api.f.serve and next dev together, and stops both together
-npm run test       # vitest
-npm run test:changed
+npm run dev          # viewer only; needs the service running
+npm run dev:all      # scripts/dev.mjs: starts the service and the viewer, stops both together
+npm run test         # vitest
+npm run test:changed # tests for files changed since the last commit
 npm run lint
 ```
 
 ## Pages
 
-| Page | Renders |
+| Path | Content |
 |---|---|
-| `/` | `TerrainViewer` on `public/terrain/sample.json`, a synthetic hill |
-| `/runs` | `RunViewer`: the run page |
-| `/soils` | `RetentionViewer`, `TextureTriangleViewer`, `SoilColumnViewer`: the soil-physics reference pages |
+| `/` | `TerrainViewer` on `public/terrain/sample.json`, a synthetic 40 × 40 hill, not model output |
+| `/runs` | `RunViewer` |
+| `/soils` | `RetentionViewer`, `TextureTriangleViewer`, `SoilColumnViewer` |
 
-Pages compose components and hold no logic.
+## Run page
 
-## The run page
+A control bar sets the site, step and request fields ([service.md](service.md)), and the run button posts the request. While the run writes, the view follows the newest day written. When the run is complete, the day scrubber can play or seek.
 
-The bar sets the site, the process step and every parameter of the run request ([service.md](service.md)); `run` posts it. `useRun` starts the run, polls while it writes, caches days and exposes the newest; `usePlayback` owns the scrubber's day (null means follow the newest) and the play timer; `useRunSeries` and `useRunComparison` refetch as days are written.
+- **Terrain** (`TerrainScene`, `TerrainSurface`): a Three.js mesh with orbit controls. Vertex colour shows one of:
+  - moisture as a fraction of capacity (of capacity plus free capacity for the subsurface step);
+  - moisture stretched over the shown day's own range;
+  - capacity;
+  - log of upslope cells;
+  - vegetation class.
+- **Observation markers** (`ObservationMarkers`): spheres at the shown day's observation cells, hidden or coloured by observed content or by modelled minus observed.
+- **Series chart** (`SeriesChart`): grid-mean stored water as a line, and the day's fluxes as bars above and below zero. It supports hover, click to seek, drag to zoom and double-click to reset.
+- **Comparison** (`ComparisonView`), for sites with observations: whole-run scores, a table per date that seeks on click, and a scatter of modelled against observed with the shown day highlighted.
 
-- **Terrain** (`TerrainScene`, `TerrainSurface`): a Three.js mesh with orbit controls, coloured per vertex by the selected `ColourBy`: moisture as a fraction of capacity (sequential blue, light dry to dark wet, fixed over the run), the same day stretched over its own range (`relative`), capacity (mm), drainage (log of cells upslope: ridges light, channels dark) or vegetation class (grass yellow, tree green, unknown grey).
-- **Observation markers** (`ObservationMarkers`, one instanced mesh of spheres above the surface): hidden, coloured by the measured content on a scale fixed over the run, or by modelled minus observed on a diverging scale (red dry, grey zero, blue wet).
-- **Day scrubber**: play/pause, slider, date; a locked progress bar until the run completes.
-- **Series chart** (`SeriesChart`, two `SeriesPanel`s, visx): stored mm as a line; the fluxes as bars from zero, rain with inflow stacked up, evaporation, runoff, subsurface lateral flow and percolation stacked down, demand and surface flow outlined; marker, hover legend, click to seek, drag to zoom, double click to reset.
-- **Comparison** (`ComparisonView`, for a site with observations): what was paired and how the run is read, the whole-run scores, a table with the whole run and a row per survey date (`ComparisonTable`; the shown day highlighted, click to seek) beside modelled against observed with the shown day in full (`ScatterChart`, thinned past a maximum).
+Scores on this page come from the service's comparison route and differ from [evaluation.md](evaluation.md) for the reasons given in [service.md](service.md).
 
-## The soils page
+## Soils page
 
-`RetentionChart`: one line per texture over a log suction axis with field capacity and wilting point marked, bars of mm per metre per model, a radio for Campbell or van Genuchten, hover highlighting across lines, bars and table. `TextureTriangle`: a dot per grid composition coloured by class, class names at centroids, table 2.4's soils ringed, the pointer reading the nearest composition. `SoilColumnChart`: depth down the page, a bar per SLGA layer as wide as its available fraction, solid within the roots and faded below, the total mm as the headline. The retention and triangle pages carry the textbook's conventions; the column page uses the model's ([soil.md](soil.md)).
+- `RetentionChart`: Campbell or van Genuchten retention curves for the twelve textures, with field capacity and wilting point at −33/−1500 J/kg, and available water per metre.
+- `TextureTriangle`: the USDA triangle on a 1 % grid, with the composition under the pointer.
+- `SoilColumnChart`: six SLGA layers chosen by texture, a root depth, and the available water within it, at the model's −10/−500 J/kg.
 
-## Structure
+## Code structure
 
-| Folder | Holds | Rule |
+| Folder | Content | Test rule |
 |---|---|---|
-| `src/c/` | Components, one per file, named after the component | every `.tsx` has a `.test.tsx` beside it; the 3D scene is asserted on its scene graph, not pixels |
-| `src/f/` | Pure functions, one per file, verbs | no React, no browser APIs; tested against hand-computed outputs |
-| `src/h/` | Hooks, `useSomething` | one per file, tested in a test DOM |
-| `src/t/` | Types shared by more than one file, one per file | a type used by one file stays in that file |
-| `src/api/` | The fetch wrappers | the only `fetch` calls |
-| `src/app/` | Next.js routing | no logic |
+| `src/c/` | Components, one per file | `.test.tsx` beside each; the 3D scene is tested on its scene graph, not pixels |
+| `src/f/` | Pure functions, one per file, no React or browser APIs | `.test.ts` beside each, against hand-computed values |
+| `src/h/` | Hooks, one per file | `.test.ts` beside each |
+| `src/t/` | Types shared by more than one file | none |
+| `src/api/` | Fetch wrappers | one test file for all |
+| `src/app/` | Next.js routes; no logic | none |
 
-Charts are visx: scales, axes and marks as React components in SVG, so every chart is ordinary components styled with the app's CSS and tested like any other component; scale and data-shaping logic lives in `src/f/`. No canvas charting library.
-
-<!-- nav -->
-← [Service](service.md) · [Index](README.md) · [Development](development.md) →
-<!-- /nav -->
+Charts are drawn with visx as SVG React components.

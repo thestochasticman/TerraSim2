@@ -6,41 +6,55 @@
 
 ## The loop
 
-`run_model(step, inputs, params, folder=None, store_params=RunStoreParams())` (`terrasim2/f/run_model.py`) runs a step over every day of the inputs. It builds one `SoilHydraulics` from the soil layers at the inputs' root depth and one `TerrainDerivatives` from the grid and latitude, then for each day expands the rain and demand tile series to cells, multiplies the demand by `inputs.demand_factor` when one is set, and calls the step.
+`run_model(step, inputs, params, folder=None, store_params=RunStoreParams())` (`terrasim2/f/run_model.py`) runs a step over every day of the inputs:
 
-With no folder it returns a `RunResult` in memory. With a folder it writes the histories into a zarr store in blocks and returns a `RunResult` over the store; the arrays are never copied.
+1. It builds one `SoilHydraulics` from the soil layers at `inputs.root_depth` and replaces its `capacity` with `inputs.grid.capacity`. Without soil layers, it uses the grid's capacity alone.
+2. It builds one `TerrainDerivatives` from the grid and `inputs.latitude`.
+3. Each day, it lays rain and reference evapotranspiration onto cells, multiplies the latter by `inputs.demand_factor` if one is set, and calls the step.
+
+The initial state is `inputs.grid.moisture`, which the loop updates in place. The caller sets it.
+
+With no `folder`, the histories are held in memory. The flux history alone takes `days × n_fluxes × rows × cols × 8` bytes. For MRI under the subsurface step (2,078 days, 7 fluxes, 400,044 cells) that is 43 GB, so in practice MRI needs a folder and enough disk for the store.
 
 ## The run store
 
-`create_run_store` makes the group; `write_run_block` writes `n` consecutive days; `load_run_result` opens it read-only.
+With a `folder`, `run_model` writes a zarr group in blocks of `write_every_days` days and returns a `RunResult` that reads from it. `create_run_store` creates the group, `write_run_block` writes a block, and `load_run_result` opens the store read-only. It refuses an incomplete store unless asked.
 
 | Array | Shape | Type | Chunks |
 |---|---|---|---|
 | `moisture` | (T, rows, cols) | float64, mm | (`chunk_days`, `chunk_rows`, `chunk_cols`) |
-| `fluxes` | (T, n_fluxes, rows, cols) | float64, mm | the same, all fluxes in one chunk |
+| `fluxes` | (T, n_fluxes, rows, cols) | float64, mm | (`chunk_days`, n_fluxes, `chunk_rows`, `chunk_cols`) |
 
-| Attribute | What it holds |
+Both arrays are created filled with NaN.
+
+| Attribute | Content |
 |---|---|
 | `dates` | ISO dates, length T |
-| `days_written` | How many leading days are safe to read while the run is in progress |
+| `days_written` | Number of leading days written; readers must not read beyond it |
 | `complete` | True once every day is written |
-| `flux_names` | The step's flux names in axis order, so a reader need not know which step ran |
+| `flux_names` | Flux names in axis-1 order |
 | `meta` | The inputs' provenance |
 
-`RunStoreParams(chunk_days=32, chunk_rows=256, chunk_cols=256, write_every_days=32, record_fluxes=True)` sets the chunking and the block size. Readers never go past `days_written`; `load_run_result` refuses an incomplete store unless asked.
+`RunStoreParams` defaults: `chunk_days=32`, `chunk_rows=256`, `chunk_cols=256`, `write_every_days=32`, `record_fluxes=True`. With `record_fluxes=False` no `fluxes` array is written.
 
 ## Reading a run
 
-`RunResult` holds `dates`, `moisture_history` (T, rows, cols) and `flux_history` (T, n_fluxes, rows, cols) or `None`. The arrays may be zarr arrays; slicing them reads only the chunks touched.
+`RunResult` holds `dates`, `moisture_history` and `flux_history` (or `None`). Over a store these are zarr arrays, and slicing reads only the chunks touched.
 
-Water content is read back as θ = θwp + moisture / root depth (`compute_water_content`), so a run is comparable with a probe or a TDR reading over the same depth ([observations.md](observations.md)).
+Volumetric water content is θ = θwp + moisture / root depth (`compute_water_content`). This assumes the cell's water is spread evenly over the root depth.
 
-## As the service runs it
+## Service runs
 
-`app/api/f/execute_run.py` is the worker: given a run folder holding `request.json`, it loads the inputs at the request's root depth (capacity and hydraulics alike), builds the root-depth field and the demand factor if the request asks for them and the site has a vegetation map, picks the step and parameters, and calls `run_model` into `store.zarr`, logging to `worker.log`. `launch_run` starts it as a subprocess so the service stays responsive; `read_run_status` reports `missing`, `running`, `complete` or `failed` from the store and the worker. `python -m app.api.f.execute_run <folder>` runs a worker by hand ([service.md](service.md)).
+`app/api/f/execute_run.py` loads the inputs at the request's root depth, sets the initial moisture to `initial_fullness × capacity`, builds the root-depth field and demand factor if requested, and calls `run_model` into `{run folder}/store.zarr`, logging to `worker.log`. `launch_run` starts it as a subprocess. `python -m app.api.f.execute_run <folder>` runs it directly ([service.md](service.md)).
 
-Compute: the downslope cascade is a Python loop over cells in flow order, about 0.6 s per day on 400,000 cells, so a 2,078-day run at MRI takes about twenty minutes; Tarrawarra (7,000 cells, 432 days) takes seconds. A vectorised, level-by-level cascade would give the same results and is the next engineering step.
+## Compute time
 
-<!-- nav -->
-← [Process steps](process-steps.md) · [Index](README.md) · [Vegetation](vegetation.md) →
-<!-- /nav -->
+The routed and subsurface steps visit cells one at a time in a Python loop. The figures below were measured on 24 November 2026 on the lab workstation, for one day of the subsurface step on each site's wettest day:
+
+| Site | Cells | ms per day |
+|---|---|---|
+| Tarrawarra | 6,984 | 29 |
+| Esdale | 70,180 | 117 |
+| MRI | 400,044 | 585 |
+
+A year of MRI took 224 s, which puts a full 2,078-day MRI run at about 21 minutes of stepping, before writing.

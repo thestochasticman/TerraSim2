@@ -4,64 +4,76 @@
 ← [Terrain](terrain.md) · [Index](README.md) · [Runs](runs.md) →
 <!-- /nav -->
 
-A step advances every cell one day. Three exist; they share one signature, the run loop, the soil hydraulics and the terrain derivatives, so new physics is a new step rather than a change to anything else.
+A step advances every cell by one day. There are three steps with one signature. All quantities are depths of water in mm over the cell.
 
 ![The processes of the subsurface step on a hillslope of three cells](figures/processes.png)
 
-## The protocol
+## Signature
 
 ```python
 step(moisture, soil_hydraulics, rain, pet, terrain_derivatives, params) -> (moisture, fluxes)
 ```
 
-| | Shape | Unit |
+| Argument | Shape | Unit |
 |---|---|---|
-| `moisture` in and out | (rows, cols) | mm stored in the cell |
-| `rain`, `pet` | (rows, cols) | mm for the day, already on cells (`get_values_on_cells` expands a tile series to the grid) |
-| `fluxes` | (n_fluxes, rows, cols) | mm; the axis-0 index is the step's `IntEnum` of flux names |
+| `moisture`, in and out | (rows, cols) | mm stored |
+| `rain`, `pet` | (rows, cols) | mm for the day, already on cells (`get_values_on_cells`) |
+| `fluxes` | (n_fluxes, rows, cols) | mm for the day; axis 0 indexed by the step's `IntEnum` |
 
-`StepFunction` (`terrasim2/k/step_function.py`) is the `Protocol`. Mass balances per cell and over the grid every day; every step's tests check it.
+`StepFunction` (`terrasim2/k/step_function.py`) is the `Protocol`. Each step's `t()` checks the per-cell water balance stated below on a random grid, to 1e-9 mm.
 
-## The closed bucket — `step_bucket_model`
+## Closed bucket: `step_bucket_model`
 
-One store per cell, the plant store, from wilting point to field capacity: `capacity` mm over the root depth. Rain infiltrates up to the room left; the rest overflows as runoff on the spot. Evaporation takes the demand times fullness to the stress exponent: `pet × (moisture / capacity) ** stress_exponent`. No lateral flow. Needs no retention curve, so it runs on inputs without soil layers.
+One store per cell of size `capacity`.
 
-- Parameters: `BucketModelParams(stress_exponent=1.0)`.
-- Fluxes: `BucketFlux` INFILTRATION, RUNOFF, EVAPORATION.
+1. Infiltration = min(rain, capacity − moisture). Rain beyond that is runoff, lost on the day.
+2. Evaporation = min(pet × f^s, store), where f = store / capacity after infiltration and s = `stress_exponent`.
 
-## The routed bucket — `step_routed_bucket_model`
+Balance: new − old = infiltration − evaporation. Terrain is not used, and the step needs only `capacity`.
 
-The same bucket, but a cell's overflow runs to its downstream cell in flow order within the day, recorded as surface flow, and only outlets shed runoff. Water that reaches a cell with room infiltrates there.
+Parameters: `BucketModelParams(stress_exponent=1.0)`. Fluxes (`BucketFlux`): INFILTRATION, RUNOFF, EVAPORATION.
 
-- Parameters: `BucketModelParams`.
-- Fluxes: `RoutedBucketFlux` INFILTRATION, INFLOW, SURFACE_FLOW, RUNOFF, EVAPORATION.
+## Routed bucket: `step_routed_bucket_model`
 
-Finding: under one 5 km rain tile the routed bucket changes nothing against the closed one. Every cell receives the same rain and overflows only when full, so overflow arriving downslope finds no room there either and runs on to the outlet. Lateral transfer has to occur in the soil.
+The closed bucket, but rain that does not fit (excess) passes to `downstream[cell]` within the day. Cells are visited in flow order. Each cell takes what arrives up to its remaining room (INFLOW) and passes the rest on (SURFACE_FLOW). At an outlet, what passes on leaves the grid (RUNOFF).
 
-## The subsurface step — `step_subsurface_bucket_model`
+Balance per cell: new − old = infiltration + inflow − evaporation. Over the grid: total excess = total inflow + total runoff.
 
-Two stores per cell: the plant store as before, and above it a free store between field capacity and saturation, `free_capacity` = (θs − θfc) × root depth mm. In one day, per cell, in flow order:
+Parameters: `BucketModelParams`. Fluxes (`RoutedBucketFlux`): INFILTRATION, INFLOW, SURFACE_FLOW, RUNOFF, EVAPORATION.
 
-1. **Infiltration.** Rain and inflow from upslope enter up to the room left in both stores and up to the day's infiltration limit, Ks g t_rain (the saturated conductivity in kg s m⁻³ times gravity, over `rain_hours`); the remainder is surface excess.
-2. **Subsurface lateral flow and percolation.** Free water moves to the downstream cell by Darcy's law at the Campbell conductivity of its content (eq. 6.35) over the cell's slope, multiplied by `lateral_multiplier` to stand for preferential flow; and percolates out of the column by `percolation_fraction` of the free store per day (0 is an impermeable base). Both are taken from the free store only; the plant store is depleted by evapotranspiration alone.
-3. **Cascade.** Excess and lateral flow from the ridges arrive at the cells below within the same day. Water arriving through the soil enters whatever room the receiving cell has, plant store first; water arriving over the surface is also subject to the infiltration limit; what finds no room passes on over the surface, recorded as surface flow, and only outlets shed runoff.
-4. **Evapotranspiration.** Reference demand, scaled by the cell's `solar_ratio` to the power `aspect_strength`, times plant-store fullness to the stress exponent.
+At Tarrawarra this step gives the same whole-run scores as the closed bucket, to three decimals; other sites have not been compared. Every cell under one SILO tile receives the same rain and overflows only when its store is full. Water passed downslope therefore reaches cells that are also full, and runs on to an outlet.
 
-- Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, percolation_fraction=0.0, rain_hours=24.0, lateral_multiplier=1.0, aspect_strength=0.0)`.
-- Fluxes: `SubsurfaceBucketFlux` INFILTRATION, INFLOW, SURFACE_FLOW, SUBSURFACE_LATERAL_FLOW, PERCOLATION, RUNOFF, EVAPORATION. Surface flow is what a cell passed on over the surface (overland flow, whether from infiltration excess or saturation excess); subsurface lateral flow is interflow; percolation is water lost below the root zone. Surface flow enters neither the cell's balance nor the grid's: it is water passing between cells.
-- Requires a retention curve (`SoilHydraulics.require_conductivity()`).
+## Subsurface step: `step_subsurface_bucket_model`
 
-## Levers outside the step
+Each cell holds water up to saturation, in two ranges of the same root zone:
 
-Two more levers act through the inputs rather than the step, so they apply to every step.
+- the plant store, 0 to `capacity`;
+- the free store above it, 0 to `free_capacity` = (θs − θfc) × root depth.
 
-- **Root depth per cell.** `ModelInputs.root_depth` may be a `(rows, cols)` field; `SoilHydraulics` and the capacity map follow it. The service builds the field from the vegetation map when a request names a `tree_root_depth` (`compute_root_depth_field`): tree cells that deep, the rest `root_depth` ([vegetation.md](vegetation.md)).
-- **Demand factor (cover).** `ModelInputs.demand_factor` is a positive field the reference evapotranspiration is multiplied by before every step (`run_model`: `pet_today = pet_today * inputs.demand_factor`). The service sets it from the vegetation map's crop coefficient divided by the grid's mean coefficient, raised to the request's `cover_strength` (`compute_demand_factor`); the division keeps the site's mean demand at the reference so only the pattern moves.
+The two ranges are not separate depths. `moisture` is their sum. In one day:
 
-## What the evaluation made of them
+1. **Infiltration.** Infiltration = min(rain, room left in the whole column, L), where L = Ks × g × `rain_hours` × 3600 (Ks in kg s m⁻³, g = 9.81 m s⁻²). The remainder is surface excess. Where Ks is unknown (NaN), L = 0 and no rain enters.
+2. **Lateral flow and percolation.** Both are computed from the free water after infiltration, F = max(store − capacity, 0), at the Campbell conductivity K(θ) for θ = θfc + F / root depth:
+   - SUBSURFACE_LATERAL_FLOW = min(m × K(θ) × g × slope × root depth / cell size × 86400, F), with m = `lateral_multiplier`. This is Darcy flow with a gravity gradient equal to the D8 slope, through a face one cell wide and one root depth high. The face width is one cell size in every direction, which overstates diagonal flow by up to √2.
+   - PERCOLATION = min(K(θ) × g × p × 86400, F − lateral flow), with p = `percolation_fraction`. Percolated water leaves the model.
+3. **Cascade.** Cells are visited in flow order. A cell first takes lateral flow arriving from upslope, up to its remaining room. It then takes surface water arriving from upslope, up to the room still left and the part of L not used in step 1. The sum is INFLOW. Untaken arrivals plus the cell's own excess pass to `downstream[cell]` over the surface (SURFACE_FLOW), and the cell's own lateral flow passes through the soil. At an outlet, both leave the grid (RUNOFF).
+4. **Evapotranspiration.** EVAPORATION = min(D × f^s, store), where f = min(store, capacity) / capacity and D = pet × `solar_ratio`^`aspect_strength`. It is subtracted from the cell's total, so it removes free water first whenever free water is present.
 
-At Tarrawarra the free store is what reaches the observed winter levels (the closed bucket cannot exceed field capacity, 0.30 m³/m³, and falls 0.15 below the surveys); the aspect lever is what organises the pattern within a survey (mean within-survey r 0.16 → 0.42); the lateral multiplier adds nothing at 10 m (0.38 at ×10, and NSE falls at ×10 and beyond); a percolation fraction of 0.01 removes a +0.03 bias at no cost to NSE, while 0.05 collapses it. See [evaluation.md](evaluation.md) for every site.
+Balance per cell: new − old = infiltration + inflow − lateral flow − percolation − evaporation. SURFACE_FLOW is water passing between cells. It does not enter the per-cell or grid balance, and on a cell it may count water that also appears in the surface flow of cells further down.
 
-<!-- nav -->
-← [Terrain](terrain.md) · [Index](README.md) · [Runs](runs.md) →
-<!-- /nav -->
+Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, percolation_fraction=0.0, rain_hours=24.0, lateral_multiplier=1.0, aspect_strength=0.0)`. `percolation_fraction` must lie in [0, 1]; 0 makes the base impermeable. Fluxes (`SubsurfaceBucketFlux`): INFILTRATION, INFLOW, SURFACE_FLOW, SUBSURFACE_LATERAL_FLOW, PERCOLATION, RUNOFF, EVAPORATION.
+
+The step calls `require_conductivity()` and fails on inputs without a retention curve.
+
+Lateral flow and percolation are computed once per day from the state after infiltration. A cell's outflow therefore does not respond to water arriving the same day, and nothing limits how far water travels in a day.
+
+## Settings applied outside the step
+
+These act through `ModelInputs` and apply to all three steps.
+
+- **Root depth per cell.** `root_depth` may be a `(rows, cols)` field, and capacity and hydraulics follow it. The service builds the field from the vegetation map when a request sets `tree_root_depth` (`compute_root_depth_field`). Tree cells take that depth and all other cells take `root_depth`.
+- **Demand factor.** `demand_factor` multiplies the reference evapotranspiration before each step (`run_model`). The service sets it to (Kc / mean Kc)^`cover_strength`, where Kc is the crop coefficient from the vegetation map (`compute_demand_factor`). Cells with an unknown class get 1. The mean of Kc is the grid mean, so the factor redistributes demand within the site. The factor's own grid mean equals 1 only when `cover_strength` is 1. A `cover_strength` of 0 sets no factor.
+
+## Not represented
+
+Energy balance, plant growth, nutrients, interception, snow, vertical flow between soil layers, capillary rise, a water table, flow divided among several neighbours, channels, travel time within a day, sub-daily rainfall other than through `rain_hours`, and management.

@@ -4,58 +4,62 @@
 [Index](README.md) · [Model inputs](model-inputs.md) →
 <!-- /nav -->
 
-TerraSim2 is a process-based model of soil water on a 10 m terrain grid, with the tooling needed to prepare its inputs from public national datasets, run it, look at a run as it proceeds, and score it against field observations.
+TerraSim2 is a daily soil-water balance of the root zone on a 10 m grid. It consists of a model package, an input-preparation package that reads the lab's data stores, a web service that runs the model, and a viewer.
 
-## Why
+These pages describe the code at commit `4f45710` on branch `rename/flux-terms` (pull request #30). The branch these pages sit on, `docs/modular`, does not contain that commit. On `docs/modular` the subsurface step's fluxes are still named `DRAINAGE` and `LEAK`, and the parameter is `leak_fraction`.
 
-Soil moisture is decided at the scale of a paddock or hillslope: aspect, drainage position and soil depth change root-zone water content by 0.1–0.2 m³/m³ over tens of metres. Satellite retrievals resolve tens of kilometres, land-surface models about 5 km, and in-situ networks are points. The inputs for a finer estimate are public and cover Australia: SILO daily climate at 0.05°, the Copernicus 30 m elevation model, the Soil and Landscape Grid of Australia (SLGA) at 90 m, and Sentinel-2 imagery at 10 m every five days. TerraSim2 combines them on a 10 m grid and reports its own error against whatever has been measured on the ground.
+## Scope
 
-## Three programs
+The model represents, per 10 m cell and per day:
+
+- infiltration of rain, limited by the room in the cell's store and, in the subsurface step, by a daily infiltration limit;
+- evapotranspiration as a reference demand scaled by store fullness;
+- overflow and subsurface lateral flow passed to one downslope neighbour within the day;
+- percolation out of the bottom of the root zone.
+
+It does not represent an energy balance, plant growth, nutrients, a layered soil profile with vertical flow between layers, capillary rise, a water table, canopy interception, snow, sub-daily rainfall, channels, or management. See [process-steps.md](process-steps.md) for the exact rules.
+
+Inputs come from SILO daily climate (0.05°, about 5 km), the Copernicus GLO-30 elevation model (30 m), the Soil and Landscape Grid of Australia (SLGA, 90 m) and Sentinel-2 NDVI (10 m). The model's output carries the spatial information of these inputs and no more. Within one SILO tile, every cell receives the same rain.
+
+## Programs
 
 ```
-troi_ingest  ──ModelInputs──▶  terrasim2  ◀──  app/api  ◀──  app/visualiser
-(prepare)                      (model)         (service)      (viewer)
+troi_ingest  ──ModelInputs folder──▶  terrasim2  ◀──imports──  app/api  ◀──HTTP──  app/visualiser
 ```
 
-| Program | Role | Depends on |
+| Program | Role | Imports |
 |---|---|---|
-| `troi_ingest/` | Reads the lab's data stores for a bounding box and date range, projects each source onto the Sentinel-2 10 m lattice, and writes prepared inputs, observations and a vegetation map to versioned folders | `troi`, `pysilo`, `pycopdem`, `pyslga`, `pysentinel2`, and `terrasim2` |
-| `terrasim2/` | The model: classes, functions, the run loop and the readers and writers of its own formats | NumPy only (zarr for run stores). It never imports `troi_ingest` or a lab package and never touches a data store |
-| `app/api/` | A FastAPI service that executes runs as separate processes and serves their state | `terrasim2` |
-| `app/visualiser/` | A Next.js + TypeScript viewer: the terrain in 3D, the daily series, the comparison with observations, and the soil-physics reference pages | Node; talks only to `app/api` |
+| `troi_ingest/` | Reads the lab's stores for a bounding box and date range, resamples each source onto the 10 m EPSG:6933 lattice of Sentinel-2, and writes inputs, observations and vegetation maps to versioned folders | `troi`, `pysilo`, `pycopdem`, `pyslga`, `pysentinel2`, `rasterio`, `pandas`, `terrasim2` |
+| `terrasim2/` | The model: classes in `k/`, functions in `f/`, the run loop, and readers and writers of its own formats | NumPy; zarr for run stores. It does not import `troi_ingest` or any lab package |
+| `app/api/` | FastAPI service that runs the model in subprocesses and serves results | `terrasim2`, FastAPI, pydantic, uvicorn |
+| `app/visualiser/` | Next.js and TypeScript viewer | Calls `app/api` only |
 
-The handoff between the ingest and the model is a `ModelInputs` object: a terrain grid, a tile map onto each coarse source, the daily series, the soil layers, the latitude and free-form provenance. In memory it is one object; on disk it is one versioned folder of NumPy arrays and CSV files that only NumPy and the standard library are needed to read ([model-inputs.md](model-inputs.md)).
+The ingest hands the model a `ModelInputs` folder ([model-inputs.md](model-inputs.md)). The model hands the service a zarr run store ([runs.md](runs.md)).
 
-The handoff between the model and the service is a run store: a zarr group of the moisture and flux histories with the run's dates and flux names in its attributes ([runs.md](runs.md)). The viewer reads the service only.
+## Code conventions
 
-## Conventions that hold everywhere
+These rules are stated in `CLAUDE.md` and enforced by review. No linter or check enforces them.
 
-These are what keep the model publishable and every unit testable on its own.
+- One unit per file. `k/` holds classes and `f/` holds functions, and each file is named after its unit. `troi_ingest` and `app/api` use the same layout. The viewer uses `src/c/` for components, `src/f/` for pure functions, `src/h/` for hooks, `src/t/` for shared types and `src/api/` for fetch wrappers.
+- Function and method names are verbs. Properties are nouns.
+- Every physical quantity states its unit in the docstring.
+- Every Python unit file defines a `t()` test. Every viewer file in `c/`, `f/` and `h/` has a `.test.ts(x)` file beside it.
+- Soil physics follows *Soil Physics with Python* (Bittelli, Campbell and Tomei, 2015), cited by equation number.
+- `CLAUDE.md` asks for Python 3.12 or later. The `borevitz_lab` environment the code is run and tested in is Python 3.11.15, and the code runs there.
 
-- **One unit per file.** In Python, `terrasim2/k/` holds classes and `terrasim2/f/` holds functions, one per file, the file named after the unit (`terrasim2/f/bucket_step.py` defines `bucket_step`; `terrasim2/k/grid.py` defines `Grid`). There is no `utils.py`. `troi_ingest` and `app/api` follow the same `k/` and `f/` layout. In the viewer, `src/c/` holds components, `src/f/` pure functions, `src/h/` hooks, `src/t/` shared types, `src/api/` the fetch wrappers; again one per file.
-- **Names are verbs.** Every function and method name is a verb (`get_cell`, `compute_capacity`, `write_model_inputs`). Properties are nouns. Components are nouns; hooks are `use` plus a noun.
-- **Units in docstrings.** Every physical quantity states its unit in the docstring entry for each parameter and attribute (`mm`, `m³/m³`, `J/kg`, `kg s m⁻³`). There are no unit comments in code lines.
-- **Every file tests itself.** Every Python unit file defines `t()`, split into `t1()`, `t2()`, … where useful, raising `AssertionError` on failure. Every viewer file in `c/`, `f/` and `h/` has a `.test.ts(x)` beside it. See [development.md](development.md) for the runners.
-- **Physics is cited.** Soil physics comes from *Soil Physics with Python* (Bittelli, Campbell and Tomei, 2015), cited by equation number in the docstrings.
-- **Modern Python.** Python 3.12 or later; `X | None` and `tuple[int, int]` directly; no `from __future__ import annotations`.
-
-## Where things are
+## Layout
 
 ```
 TerraSim2/
-├── CLAUDE.md            # the compact reference the code is held to
+├── CLAUDE.md            # compact reference and the file tree
 ├── docs/                # these pages
 ├── tests.py             # terrasim2 test runner
-├── terrasim2/           # the model: k/ classes, f/ functions
-├── troi_ingest/         # input preparation from the lab stores: k/, f/, tests.py
-├── app/api/             # the service: k/, f/, tests.py
-├── app/visualiser/      # the viewer: src/{c,f,h,t,api,app}
+├── terrasim2/           # model: k/ classes, f/ functions
+├── troi_ingest/         # input preparation: k/, f/, tests.py
+├── app/api/             # service: k/, f/, tests.py
+├── app/visualiser/      # viewer: src/{c,f,h,t,api,app}
 └── data/
     ├── dense_sites.csv  # one row per validation site: stub, bbox, start, end
-    ├── dense_sites.md   # the same with caveats and provenance
-    └── dev_sites/       # committed prepared inputs, observations and vegetation per site
+    ├── dense_sites.md   # the same table with sources and caveats
+    └── dev_sites/       # committed inputs, observations and vegetation maps, 27 MB
 ```
-
-<!-- nav -->
-[Index](README.md) · [Model inputs](model-inputs.md) →
-<!-- /nav -->

@@ -4,30 +4,41 @@
 ← [Runs](runs.md) · [Index](README.md) · [Observations](observations.md) →
 <!-- /nav -->
 
-A site's vegetation enters the model as a map of what grows on each cell, made from a year of Sentinel-2 NDVI, and is used for two levers: a root depth per class and a demand factor per cell.
+A vegetation map classifies each cell as tree or grass from one year of Sentinel-2 NDVI. The service uses it for two optional settings: a tree root depth, and a demand factor. The model does not use it unless a request sets one of these.
 
 ## The map
 
-`VegetationMap` (`terrasim2/k/vegetation_map.py`) holds, per cell, `class_index` (0 grass, 1 tree, −1 unknown) and the NDVI `low`, `median` and `high` it was classified from (the 10th, 50th and 90th percentiles over the reference period). `compute_fraction(class)` gives the share of cells; `compute_root_depth(depth per class, unknown depth)` gives a `(rows, cols)` field; `compute_crop_coefficient()` gives a coefficient per cell from the low.
+`VegetationMap` (`terrasim2/k/vegetation_map.py`) holds per cell `class_index` (0 grass, 1 tree, −1 unknown) and the NDVI `low`, `median` and `high`, which are the 10th, 50th and 90th percentiles over the year. Its methods:
 
-On disk it is `data/dev_sites/{stub}/vegetation/`: `manifest.json` (`version`, `rows`, `cols`, `classes`, `features`, `fraction`, `n_unknown`, `file`, `units`, `written_at`, `meta`) and `vegetation.npz`. `write_vegetation_map` and `load_vegetation_map` define the layout (`VegetationMap.FORMAT_VERSION` = 1); the loader refuses other versions or other class lists.
+- `compute_fraction(class)` gives the share of cells in a class.
+- `compute_root_depth(depth per class, unknown depth)` gives a depth field.
+- `compute_crop_coefficient()` gives a crop coefficient from `low`.
+
+On disk: `data/dev_sites/{stub}/vegetation/manifest.json` and `vegetation.npz`, written and read by `write_vegetation_map` and `load_vegetation_map` (`VegetationMap.FORMAT_VERSION` = 1).
 
 ## Classification
 
-`classify_vegetation(low, high, VegetationThresholds)` calls a cell a tree where the low stays at or above `tree_low_min` (0.4) and the swing high − low is at most `tree_amplitude_max` (0.2): an evergreen canopy keeps its greenness through the brownest season and moves by a fifth or less, while grass browns off. Cells with too few clear looks are −1.
+`classify_vegetation(low, high, VegetationThresholds)` classifies a cell as tree where `low` ≥ `tree_low_min` (0.4) and `high` − `low` ≤ `tree_amplitude_max` (0.2), and as grass otherwise. A cell with fewer than 8 cloud-free observations in the year is unknown. The thresholds were set by hand. They have not been checked against mapped tree cover at any site.
 
-The reference period is the site's own last year when the Sentinel-2 archive covers it, else calendar 2023 (`choose_reference_period`); `load_ndvi_features` takes the percentiles and the count of clear looks per cell from the lab's cube; `ingest_vegetation` assembles the map with provenance; `python -m troi_ingest.f.ingest_site_vegetation [stubs]` writes every site and checks the shape against the committed inputs. At Esdale 2% of cells are trees, along the tree lines and the riparian strip.
+The year of imagery is the 12 months ending on the site's end date, if Sentinel-2 (from July 2015) covers them, else calendar 2023 (`choose_reference_period`). Tarrawarra, SASMAS Stanley and Nerrigundah predate Sentinel-2, so their maps describe 2023, not their observation periods.
 
-## Root depth per class
+| Site | Tree share | Imagery |
+|---|---|---|
+| Tarrawarra | 17.8% | 2023 |
+| Esdale | 1.7% | 2025-07-02 to 2026-07-01 |
+| MRI | 34.4% | 2025-06-04 to 2026-06-03 |
+| Llara | 7.7% | 2023-07-02 to 2024-06-30 |
+| SASMAS Stanley | 0.7% | 2023 |
+| Nerrigundah | 6.7% | 2023 |
 
-A `RunRequest` with `tree_root_depth` makes tree cells that deep and the rest `root_depth` (`compute_root_depth_field`); `SoilLayers.compute_hydraulics`, `SoilHydraulics`, `ModelInputs` and `load_model_inputs` all accept a field. At MRI, with a third of its cells under trees, the eighteen logger profiles were too few to test the lever.
+`load_ndvi_features` (troi_ingest) computes the percentiles and clear-look counts from the lab's Sentinel-2 cube. `python -m troi_ingest.f.ingest_site_vegetation [stubs]` writes the maps.
 
-## The cover lever
+## Tree root depth
 
-`compute_crop_coefficient(ndvi, ndvi_bare=0.1, ndvi_full=0.7, kc_bare=0.3, kc_full=1.1)` maps the NDVI low linearly onto an FAO-56 crop coefficient between bare ground and a closed canopy, NaN passing through. The service's `compute_demand_factor` divides it by its grid mean and raises it to the request's `cover_strength`, 1 where the map is unknown; `run_model` multiplies the reference evapotranspiration by it before every step. The division keeps the site's mean demand at the reference, so only the arrangement of demand within the site changes.
+When a `RunRequest` sets `tree_root_depth`, tree cells take that depth and all other cells, unknown included, take `root_depth` (`compute_root_depth_field`). Capacity and hydraulics are then computed per cell. This setting has not been evaluated. MRI, the site with the most tree cover, has four logger profiles with the layers needed for scoring.
 
-The strength is a site setting with a physical default of 0. At Esdale the hand campaign showed persistent cover lowering water content independently of aspect (partial r −0.56), and the lever at 4 raised the within-survey correlation from −0.13 to 0.33; at Tarrawarra's pasture any strength above 0 lowered it. See [evaluation.md](evaluation.md).
+## Demand factor (cover)
 
-<!-- nav -->
-← [Runs](runs.md) · [Index](README.md) · [Observations](observations.md) →
-<!-- /nav -->
+`compute_crop_coefficient(ndvi, ndvi_bare=0.1, ndvi_full=0.7, kc_bare=0.3, kc_full=1.1)` maps the NDVI low linearly to a crop coefficient Kc, clipped to [0.3, 1.1], with NaN passed through. The service's `compute_demand_factor` returns (Kc / grid-mean Kc)^`cover_strength`, with 1 where Kc is NaN. `run_model` multiplies the reference evapotranspiration by this factor every day. The linear NDVI-to-Kc mapping is the one TerraSim version 1 used. Its end points are fixed defaults and were not fitted to any site.
+
+`cover_strength` defaults to 0, which sets no factor. The evaluation chose 4 at Esdale and 0 elsewhere ([evaluation.md](evaluation.md)).
