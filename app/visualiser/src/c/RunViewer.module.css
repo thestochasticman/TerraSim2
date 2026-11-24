@@ -1,13 +1,14 @@
 .viewer {
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto auto auto auto auto;
   width: 100vw;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 .bar {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   align-items: center;
   padding: 0.5rem 1rem;
   font-family: system-ui, sans-serif;
@@ -18,8 +19,10 @@
   width: 4.5rem;
 }
 
+/* The scene takes most of the viewport whatever sits below it; the page scrolls to the chart and the comparison. */
 .scene {
-  min-height: 0;
+  height: 64vh;
+  min-height: 420px;
 }
 
 .swatch {

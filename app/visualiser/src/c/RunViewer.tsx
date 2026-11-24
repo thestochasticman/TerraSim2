@@ -6,6 +6,9 @@ import { fetchSites } from "@/api/fetchSites";
 import { ComparisonView } from "@/c/ComparisonView";
 import { DayScrubber } from "@/c/DayScrubber";
 import { SeriesChart } from "@/c/SeriesChart";
+import { FREE_STORE_COLOUR, PLANT_STORE_COLOUR } from "@/c/BucketColumns";
+import { buildBucketColumns } from "@/f/buildBucketColumns";
+import { selectBucketStore } from "@/f/selectBucketStore";
 import { buildObservationMarkers } from "@/f/buildObservationMarkers";
 import { computeComparisonRanges } from "@/f/computeComparisonRanges";
 import { computeFiniteRange } from "@/f/computeFiniteRange";
@@ -14,6 +17,7 @@ import { usePlayback } from "@/h/usePlayback";
 import { useRun } from "@/h/useRun";
 import { useRunComparison } from "@/h/useRunComparison";
 import { useRunSeries } from "@/h/useRunSeries";
+import type { BucketStore } from "@/t/BucketStore";
 import type { ColourBy } from "@/t/ColourBy";
 import type { MarkerMode } from "@/t/MarkerMode";
 import type { RunRequest } from "@/t/RunRequest";
@@ -34,7 +38,10 @@ const TerrainScene = dynamic(() => import("@/c/TerrainScene").then((m) => m.Terr
  *
  * When the site has observations, the day's points sit on the terrain as
  * markers coloured by what was observed or by the run's error there, and
- * the comparison below the chart scores the run against them.
+ * the comparison below the chart scores the run against them. A buckets
+ * select hangs the soil columns under the surface, one per cell or per
+ * block of cells, filled by the shown day's water; a store select shows
+ * both stores, the plant store alone or the free store alone.
  */
 export function RunViewer() {
   const [sites, setSites] = useState<string[]>([]);
@@ -43,7 +50,7 @@ export function RunViewer() {
   const [rootDepth, setRootDepth] = useState(0.3);
   const [treeRootDepth, setTreeRootDepth] = useState<number | null>(null);
   const [step, setStep] = useState<RunRequest["step"]>("bucket");
-  const [leakFraction, setLeakFraction] = useState(0);
+  const [percolationFraction, setPercolationFraction] = useState(0);
   const [rainHours, setRainHours] = useState(24);
   const [lateralMultiplier, setLateralMultiplier] = useState(1);
   const [aspectStrength, setAspectStrength] = useState(0);
@@ -58,6 +65,8 @@ export function RunViewer() {
   const [scrubError, setScrubError] = useState<string | null>(null);
   const [colourBy, setColourBy] = useState<ColourBy>("moisture");
   const [markerMode, setMarkerMode] = useState<MarkerMode>("observed");
+  const [bucketBlock, setBucketBlock] = useState(0);
+  const [bucketStore, setBucketStore] = useState<BucketStore>("both");
   const error = runError ?? sitesError ?? seriesError ?? comparisonError ?? scrubError;
 
   useEffect(() => {
@@ -83,7 +92,7 @@ export function RunViewer() {
 
   const start = () => {
     if (!stub) return;
-    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, leakFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
+    setRequest({ stub, step, stressExponent: 1, initialFullness: 0.5, rootDepth, treeRootDepth, percolationFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength, writeEveryDays: 1, recordFluxes: true });
   };
 
   // A scrubbed day only counts for the run it was fetched from; anything else falls back to the newest day of the current run.
@@ -100,6 +109,11 @@ export function RunViewer() {
   }, [terrain, request]);
   const ranges = useMemo(() => (pairs ? computeComparisonRanges(pairs) : null), [pairs]);
   const markers = useMemo(() => (terrain && pairs && ranges && shown ? buildObservationMarkers(terrain, pairs, shown.t, markerMode, ranges) : null), [terrain, pairs, ranges, shown, markerMode]);
+  const withFreeStore = request?.step === "subsurface";
+  const columns = useMemo(() => (terrain && shown && bucketBlock > 0 ? buildBucketColumns(terrain, shown.moisture, bucketBlock, withFreeStore) : null), [terrain, shown, bucketBlock, withFreeStore]);
+  // Only a run with a free store has two stores to choose between; the others always show the plant store.
+  const shownStore: BucketStore = withFreeStore ? bucketStore : "both";
+  const buckets = useMemo(() => (columns ? selectBucketStore(columns, shownStore) : null), [columns, shownStore]);
 
   return (
     <div className={styles.viewer}>
@@ -125,8 +139,8 @@ export function RunViewer() {
         {step === "subsurface" && (
           <>
             <label>
-              leak{" "}
-              <input type="number" min={0} max={1} step={0.05} value={leakFraction} onChange={(e) => setLeakFraction(Number(e.target.value))} aria-label="leak fraction" className={styles.depth} />
+              percolation{" "}
+              <input type="number" min={0} max={1} step={0.05} value={percolationFraction} onChange={(e) => setPercolationFraction(Number(e.target.value))} aria-label="percolation fraction" className={styles.depth} />
             </label>
             <label>
               rain hours{" "}
@@ -167,6 +181,7 @@ export function RunViewer() {
             <option value="capacity">capacity, mm</option>
             <option value="upslope">drainage, cells upslope</option>
             {terrain?.vegetation && <option value="vegetation">vegetation, tree or grass</option>}
+            <option value="earth">earth tone, no data</option>
           </select>
         </label>
         {colourBy === "vegetation" && terrain?.vegetationClasses && (
@@ -196,6 +211,42 @@ export function RunViewer() {
             {upslopeRange.min.toFixed(0)} to {upslopeRange.max.toFixed(0)} cells drain through, light to dark on a log scale
           </span>
         )}
+        <label title="soil columns under the surface, one per block of cells, as deep as the soil's capacity and filled by the day's water">
+          buckets{" "}
+          <select value={bucketBlock} onChange={(e) => setBucketBlock(Number(e.target.value))} aria-label="buckets">
+            <option value={0}>hidden</option>
+            <option value={1}>each cell</option>
+            <option value={5}>5 × 5 cells</option>
+            <option value={10}>10 × 10 cells</option>
+          </select>
+        </label>
+        {buckets && withFreeStore && (
+          <label title="which store the columns show; both are on the same depth scale">
+            store{" "}
+            <select value={bucketStore} onChange={(e) => setBucketStore(e.target.value as BucketStore)} aria-label="store">
+              <option value="both">both stores</option>
+              <option value="plant">plant store</option>
+              <option value="free">free store</option>
+            </select>
+          </label>
+        )}
+        {buckets && (
+          <span data-testid="buckets-legend">
+            {shownStore !== "free" && (
+              <>
+                <span className={styles.swatch} style={{ background: PLANT_STORE_COLOUR }} />
+                plant store{" "}
+              </>
+            )}
+            {withFreeStore && shownStore !== "plant" && (
+              <>
+                <span className={styles.swatch} style={{ background: FREE_STORE_COLOUR }} />
+                free store{" "}
+              </>
+            )}
+            · a column is as deep as its soil holds
+          </span>
+        )}
         {comparison && (
           <label>
             observations{" "}
@@ -203,6 +254,7 @@ export function RunViewer() {
               <option value="none">hidden</option>
               <option value="observed">observed content</option>
               <option value="error">model minus observed</option>
+              <option value="sensors">sensors, in red</option>
             </select>
           </label>
         )}
@@ -210,6 +262,9 @@ export function RunViewer() {
           <span data-testid="observed-legend">
             observed {ranges.observed.min.toFixed(2)} to {ranges.observed.max.toFixed(2)} m³/m³, light to dark
           </span>
+        )}
+        {comparison && markerMode === "sensors" && markers && (
+          <span data-testid="sensors-legend">{markers.count} sensors of the day, in red</span>
         )}
         {comparison && markerMode === "error" && ranges?.errorScale && (
           <span data-testid="error-legend">
@@ -229,7 +284,7 @@ export function RunViewer() {
           onTogglePlay={playback.togglePlay}
         />
       )}
-      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} />}</div>
+      <div className={styles.scene}>{terrain && <TerrainScene grid={terrain} moisture={shown?.moisture} colourBy={colourBy} fullCapacity={fullCapacity} markers={markers ?? undefined} buckets={buckets ?? undefined} />}</div>
       {series && series.dates.length > 0 && <SeriesChart series={series} day={shown?.t ?? null} onSeek={complete ? playback.setDay : undefined} />}
       {comparison && pairs && status && <ComparisonView comparison={comparison} pairs={pairs} day={shown?.t ?? null} dates={status.dates} onSeek={complete ? playback.setDay : undefined} />}
     </div>

@@ -23,8 +23,8 @@ vi.mock("@/c/SeriesChart", () => ({
   ),
 }));
 vi.mock("@/c/TerrainScene", () => ({
-  TerrainScene: ({ grid, moisture, colourBy, fullCapacity, markers }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array; markers?: { count: number } }) => (
-    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"} data-markers={markers ? markers.count : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
+  TerrainScene: ({ grid, moisture, colourBy, fullCapacity, markers, buckets }: { grid: TerrainGrid; moisture?: Float32Array; colourBy?: string; fullCapacity?: Float64Array; markers?: { count: number }; buckets?: { count: number; block: number; plantDepth: Float32Array; freeDepth: Float32Array } }) => (
+    <div data-testid="scene" data-colour-by={colourBy ?? "none"} data-full={fullCapacity ? Array.from(fullCapacity).join(",") : "none"} data-markers={markers ? markers.count : "none"} data-buckets={buckets ? `${buckets.count}@${buckets.block}` : "none"} data-depths={buckets ? `${Array.from(buckets.plantDepth).map((v) => v.toFixed(2)).join("|")};${Array.from(buckets.freeDepth).map((v) => v.toFixed(2)).join("|")}` : "none"}>{`${grid.rows}x${grid.cols}:${moisture ? Array.from(moisture).join(",") : "none"}`}</div>
   ),
 }));
 
@@ -82,8 +82,69 @@ describe("RunViewer", () => {
     expect(screen.getByTestId("error-legend").textContent).toContain("0.10");
     expect(screen.queryByTestId("observed-legend")).toBeNull();
 
+    fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "sensors" } });
+    expect(screen.getByTestId("scene").dataset.markers).toBe("2");
+    expect(screen.getByTestId("sensors-legend").textContent).toBe("2 sensors of the day, in red");
+    expect(screen.queryByTestId("error-legend")).toBeNull();
+
     fireEvent.change(screen.getByRole("combobox", { name: "observations" }), { target: { value: "none" } });
     expect(screen.getByTestId("scene").dataset.markers).toBe("none");
+  });
+
+  it("the buckets select hangs a column per block under the surface for the shown day, with a legend, and hides them again", async () => {
+    useRun.mockReturnValue({ ...completeRun(), terrain: { ...terrain, capacity: Float64Array.from([40, 80]), freeCapacity: Float64Array.from([20, 40]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    expect(screen.getByTestId("scene").dataset.buckets).toBe("none");
+    expect(screen.queryByTestId("buckets-legend")).toBeNull();
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "1" } });
+    expect(screen.getByTestId("scene").dataset.buckets).toBe("2@1");
+    expect(screen.getByTestId("buckets-legend").textContent).toContain("plant store");
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "5" } });
+    expect(screen.getByTestId("scene").dataset.buckets).toBe("1@5");
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "0" } });
+    expect(screen.getByTestId("scene").dataset.buckets).toBe("none");
+    expect(screen.queryByTestId("buckets-legend")).toBeNull();
+  });
+
+  it("the earth option passes through to the scene with no legend", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "colour by" }), { target: { value: "earth" } });
+    expect(screen.getByTestId("scene").dataset.colourBy).toBe("earth");
+    expect(screen.queryByTestId("relative-legend")).toBeNull();
+  });
+
+  it("a subsurface run offers a store select that draws the plant store alone or the free store alone on the same scale", async () => {
+    useRun.mockReturnValue({ ...completeRun(), terrain: { ...terrain, capacity: Float64Array.from([40, 80]), freeCapacity: Float64Array.from([20, 40]) } });
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "1" } });
+    expect(screen.queryByRole("combobox", { name: "store" })).toBeNull();
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
+    fireEvent.click(screen.getByRole("button", { name: "run" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "store" })).toBeTruthy());
+    // the longer side is 10 m: 0.12 x 10 / 120 mm = 0.01 m per mm
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.40|0.80;0.20|0.40");
+    expect(screen.getByTestId("buckets-legend").textContent).toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "store" }), { target: { value: "plant" } });
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.40|0.80;0.00|0.00");
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("free store");
+    fireEvent.change(screen.getByRole("combobox", { name: "store" }), { target: { value: "free" } });
+    expect(screen.getByTestId("scene").dataset.depths).toBe("0.00|0.00;0.20|0.40");
+    expect(screen.getByTestId("buckets-legend").textContent).not.toContain("plant store");
+  });
+
+  it("a terrain without capacity gives no bucket columns whatever the select says", async () => {
+    useRun.mockReturnValue(completeRun());
+    render(<RunViewer />);
+    await waitFor(() => expect(screen.getByTestId("scene")).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "buckets" }), { target: { value: "1" } });
+    expect(screen.getByTestId("scene").dataset.buckets).toBe("none");
+    expect(screen.queryByTestId("buckets-legend")).toBeNull();
   });
 
   const select = () => screen.getByRole("combobox", { name: "site" }) as HTMLSelectElement;
@@ -113,17 +174,17 @@ describe("RunViewer", () => {
     await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "routed" })));
   });
 
-  it("the subsurface model shows its leak and rain-hours fields and sends them", async () => {
+  it("the subsurface model shows its percolation and rain-hours fields and sends them", async () => {
     render(<RunViewer />);
     await waitFor(() => expect(select().disabled).toBe(false));
-    expect(screen.queryByLabelText("leak fraction")).toBeNull();
+    expect(screen.queryByLabelText("percolation fraction")).toBeNull();
     fireEvent.change(screen.getByRole("combobox", { name: "model" }), { target: { value: "subsurface" } });
-    fireEvent.change(screen.getByLabelText("leak fraction"), { target: { value: "0.2" } });
+    fireEvent.change(screen.getByLabelText("percolation fraction"), { target: { value: "0.2" } });
     fireEvent.change(screen.getByLabelText("rain hours"), { target: { value: "6" } });
     fireEvent.change(screen.getByLabelText("lateral multiplier"), { target: { value: "30" } });
     fireEvent.change(screen.getByLabelText("aspect strength"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: "run" }));
-    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", leakFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
+    await waitFor(() => expect(useRun).toHaveBeenLastCalledWith(expect.objectContaining({ step: "subsurface", percolationFraction: 0.2, rainHours: 6, lateralMultiplier: 30, aspectStrength: 1 })));
   });
 
   it("the cover strength is 0 until set and goes into the request for any model", async () => {

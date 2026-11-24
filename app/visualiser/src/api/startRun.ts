@@ -16,7 +16,7 @@ export async function startRun(request: RunRequest): Promise<{ runId: string; st
       initial_fullness: request.initialFullness,
       root_depth: request.rootDepth,
       tree_root_depth: request.treeRootDepth,
-      leak_fraction: request.leakFraction,
+      percolation_fraction: request.percolationFraction,
       rain_hours: request.rainHours,
       lateral_multiplier: request.lateralMultiplier,
       aspect_strength: request.aspectStrength,

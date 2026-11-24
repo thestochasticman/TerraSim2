@@ -54,10 +54,10 @@ TerraSim2/
 │   │   ├── cell_to_tile_map.py      # which tile (column of a coarse source) each cell reads; one per source lattice
 │   │   ├── tile_series.py           # one variable's daily values, one column per tile; source-agnostic
 │   │   ├── bucket_model_params.py   # frozen dataclass of the bucket step's tunables (stress_exponent)
-│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, leak_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit), lateral_multiplier (anisotropy of the downslope drainage; 1 = matrix), aspect_strength (demand follows solar_ratio to this power; 0 = off)
+│   │   ├── subsurface_bucket_params.py # frozen dataclass: stress_exponent, percolation_fraction (0 = impermeable base), rain_hours (sets the day's infiltration limit), lateral_multiplier (anisotropy of the downslope drainage; 1 = matrix), aspect_strength (demand follows solar_ratio to this power; 0 = off)
 │   │   ├── bucket_flux.py           # IntEnum: INFILTRATION=0, RUNOFF=1, EVAPORATION=2; axis-0 index of the bucket step's flux array
-│   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, RUNOFF=2, EVAPORATION=3; the routed step's flux axis
-│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, DRAINAGE, LEAK, RUNOFF, EVAPORATION; the subsurface step's flux axis
+│   │   ├── routed_bucket_flux.py    # IntEnum: INFILTRATION=0, INFLOW=1, SURFACE_FLOW=2, RUNOFF=3, EVAPORATION=4; the routed step's flux axis
+│   │   ├── subsurface_bucket_flux.py # IntEnum: INFILTRATION, INFLOW, SURFACE_FLOW, SUBSURFACE_LATERAL_FLOW, PERCOLATION, RUNOFF, EVAPORATION; the subsurface step's flux axis
 │   │   ├── step_function.py         # Protocol: (moisture, soil_hydraulics, rain, pet, terrain_derivatives, params) -> (moisture (rows, cols), fluxes (n_fluxes, rows, cols))
 │   │   ├── run_result.py            # dates, moisture_history (T, rows, cols), flux_history (T, n_fluxes, rows, cols) or None; arrays may be zarr, never copied
 │   │   ├── run_store_params.py      # chunk_days, chunk_rows, chunk_cols, write_every_days, record_fluxes
@@ -71,13 +71,13 @@ TerraSim2/
 │   │   ├── vegetation_thresholds.py # frozen dataclass: tree_low_min, tree_amplitude_max, the NDVI rule that tells trees from grass
 │   │   ├── vegetation_map.py        # what grows on each cell: class_index (0 grass, 1 tree, -1 unknown) and the NDVI low, median, high it came from; FORMAT_VERSION; compute_fraction(class), compute_root_depth(depth per class, unknown depth) -> field, compute_crop_coefficient() -> Kc per cell from the low
 │   │   ├── site_observations.py     # point measurements of volumetric water content on a grid's cells: dates, row, col, station, depth interval, vwc, n; FORMAT_VERSION; select_day, select_layer
-│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells, surface_slope and aspect (the ground's own tilt), solar_ratio (direct sun over a year relative to flat; needs the latitude given at construction)
+│   │   └── terrain_derivatives.py   # what follows from a terrain's shape, each a cached property computed on first use: filled, downstream (-1 at outlets), slope, order, upslope_cells, flow_levels (the cells grouped so each group can be stepped at once), surface_slope and aspect (the ground's own tilt), solar_ratio (direct sun over a year relative to flat; needs the latitude given at construction)
 │   └── f/
 │       ├── __init__.py
 │       ├── get_values_on_cells.py   # (map, series, day) -> (rows, cols) field; tiles as flat patches
 │       ├── step_bucket_model.py     # one day of closed per-cell buckets: infiltrate, overflow, evaporate; no lateral flow
-│       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill in flow order within the day; only outlets shed runoff
-│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and leaks down by leak_fraction; rain infiltrates up to K_s g rain_hours; overflow and drainage cascade in flow order
+│       ├── step_routed_bucket_model.py # one day of buckets whose overflow cascades downhill within the day (cascade_downhill), recorded as SURFACE_FLOW; only outlets shed runoff
+│       ├── step_subsurface_bucket_model.py # buckets with a free store between field capacity and saturation that drains downslope by Darcy at the Campbell conductivity of its content and percolates down by percolation_fraction; rain infiltrates up to K_s g rain_hours; surface excess and subsurface flow cascade downhill (cascade_downhill); what a cell passes on over the surface is recorded as SURFACE_FLOW
 │       ├── run_model.py             # (step, ModelInputs, params, folder=None, store_params) -> RunResult; one SoilHydraulics and one TerrainDerivatives per run; in memory, or blocks into a zarr store with flux_names in its attrs
 │       ├── create_run_store.py      # empty zarr group: moisture (T, rows, cols), fluxes (T, n, rows, cols), attrs dates/complete/flux_names/meta
 │       ├── write_run_block.py       # write n consecutive days into the store
@@ -104,6 +104,8 @@ TerraSim2/
 │       ├── compute_flow_direction.py          # (elevation, cell size) -> (downstream flat index or -1, slope) by steepest descent to one of eight neighbours
 │       ├── compute_flow_order.py              # (elevation, downstream) -> flat indices upstream before downstream; refuses non-descending directions
 │       ├── compute_upslope_cells.py           # (downstream, order) -> cells draining through each cell, itself included
+│       ├── compute_flow_levels.py             # (downstream, order) -> (cells, bounds): cells grouped by the longest flow path ending in each, so everything draining into a cell is in an earlier group
+│       ├── cascade_downhill.py                # (excess, lateral, room, limit, downstream, cells, bounds) -> inflow, surface flow, runoff: the within-day cascade a level at a time, the same arithmetic as visiting cells in flow order
 │       ├── compute_slope_aspect.py            # (elevation, cell size) -> the ground's tilt (radians) and the direction it faces (downslope, clockwise from north), by central differences
 │       ├── compute_solar_ratio.py             # (slope, aspect, latitude, days, hours) -> direct clear-sky sun on the tilted ground over a year relative to flat, per cell; 1 on flat ground
 │       ├── write_site_observations.py         # SiteObservations -> folder (manifest.json, observations.npz)
@@ -158,7 +160,7 @@ TerraSim2/
 │       └── ingest_site_observations.py  # stubs -> {stub: folder}; `python -m troi_ingest.f.ingest_site_observations [stubs]`; checks the shape against the committed inputs
 └── app/                   # the visualiser and the service it talks to
     ├── api/               # Python service: own k/, f/, tests.py (PASS/SKIP/FAIL, --watch); imports terrasim2
-    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, leak_fraction, rain_hours, lateral_multiplier, aspect_strength, cover_strength, tree_root_depth (optional), write_every_days, chunk_days, record_fluxes
+    │   ├── k/run_request.py        # pydantic RunRequest: stub, step (bucket | routed | subsurface), stress_exponent, initial_fullness, root_depth, percolation_fraction, rain_hours, lateral_multiplier, aspect_strength, cover_strength, tree_root_depth (optional), write_every_days, chunk_days, record_fluxes
     │   └── f/
     │       ├── compute_run_id.py   # (RunRequest, inputs key) -> "{stub}-{12 hex}"; same request on the same inputs, same id
     │       ├── read_inputs_key.py  # model_inputs folder -> "v{version}@{written_at}", so a store from older inputs is never served
@@ -198,10 +200,11 @@ TerraSim2/
             ├── c/                             # every .tsx has a .test.tsx beside it
             │   ├── TerrainViewer.tsx          # fetches via useTerrainGrid, shows status/error, loads scene client-only
             │   ├── TerrainViewer.module.css
-            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy and observation markers
+            │   ├── TerrainScene.tsx           # Canvas, camera frame, lights, OrbitControls, TerrainSurface; optional moisture, colourBy, observation markers and bucket columns, the surface translucent over the columns
             │   ├── ObservationMarkers.tsx     # one instanced mesh of spheres above the surface from a MarkerSet; must sit inside a Canvas
-            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity, drainage or vegetation with colourBy="capacity", "upslope" or "vegetation", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white)
-            │   ├── RunViewer.tsx              # site picker, model select, root depth, tree root depth and cover fields, leak, rain-hours, lateral-multiplier and aspect fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed) that puts the day's markers on the terrain, and the ComparisonView below the chart
+            │   ├── BucketColumns.tsx          # the soil columns under the surface from a BucketSet, three instanced boxes: a translucent shell, the plant store's water, the free store's water; must sit inside a Canvas
+            │   ├── TerrainSurface.tsx         # the mesh; must sit inside a Canvas; vertex colours always on: moisture when given (absolute, or stretched over the day with colourBy="relative"), capacity, drainage or vegetation with colourBy="capacity", "upslope" or "vegetation", over fullCapacity when given; else an earth tone (switching the material mode after it has drawn leaves it white); an opacity below 1 draws it translucent
+            │   ├── RunViewer.tsx              # site picker, model select, root depth, tree root depth and cover fields, percolation, rain-hours, lateral-multiplier and aspect fields for the subsurface model, run button, status, colour-by select (moisture, moisture stretched over the day, capacity, drainage, and vegetation when the site has a map) with a legend; follows the newest day while running, scrubs when complete; for a site with observations, an observations select (hidden, observed content, model minus observed, sensors in red) that puts the day's markers on the terrain, and the ComparisonView below the chart; a buckets select (hidden, each cell, 5 × 5, 10 × 10 cells) that hangs the soil columns under the surface, filled by the shown day, and for a subsurface run a store select (both, plant store, free store)
             │   ├── RunViewer.module.css
             │   ├── ComparisonView.tsx         # what was paired and how the run is read, the whole-run scores, then ComparisonTable beside ScatterChart
             │   ├── ComparisonView.module.css
@@ -211,7 +214,7 @@ TerraSim2/
             │   ├── ScatterChart.module.css
             │   ├── DayScrubber.tsx            # play/pause, day slider, date; a locked progress bar until the run completes
             │   ├── DayScrubber.module.css
-            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff + drainage + leak stacked down, demand outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
+            │   ├── SeriesChart.tsx            # two visx panels: stored mm as a line; fluxes mm/day as bars from zero (rain with inflow stacked up, evaporation + runoff + subsurface lateral flow + percolation stacked down, demand and surface flow outlined); marker, hover legend, click to seek, drag to zoom, double click to reset
             │   ├── SeriesChart.module.css
             │   ├── SeriesPanel.tsx            # one panel: y axis (|values|), grid rows, bar groups up/down from zero with optional outline, lines, marker; parent owns the SVG
             │   ├── RetentionViewer.tsx        # fetches the book's curves via useRetentionCurves, caption, status/error, then RetentionChart
@@ -258,6 +261,8 @@ TerraSim2/
             │   ├── selectPairsOnDay.ts        # (pairs, t) -> indices observed on that day
             │   ├── computeComparisonRanges.ts # pairs -> the observed {min, max} and the largest |error|, the marker colour scales fixed over the run
             │   ├── buildObservationMarkers.ts # (grid, pairs, t, mode, ranges) -> MarkerSet: a sphere per observation of the day at its cell, lifted above the surface, coloured by mode
+            │   ├── buildBucketColumns.ts      # (grid, day's moisture, block, withFreeStore) -> BucketSet: one column per block of cells, as deep as the block's total capacity on a shared scale, the plant and free stores filled by the day's water
+            │   ├── selectBucketStore.ts       # (BucketSet, store) -> the set with only the plant store or only the free store drawn, depths on the same scale
             │   └── readPositiveInteger.ts
             ├── h/
             │   ├── useTerrainGrid.ts          # fetch + parse a terrain JSON by url
@@ -272,21 +277,23 @@ TerraSim2/
             └── t/
                 ├── TerrainGrid.ts             # rows, cols, cellSize, elevation, capacity?, freeCapacity?, upslopeCells?, vegetation? with vegetationClasses?
                 ├── TerrainMesh.ts
-                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, treeRootDepth (null for the same depth everywhere), leakFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength
+                ├── RunRequest.ts              # mirrors app/api RunRequest, camelCase, with rootDepth, treeRootDepth (null for the same depth everywhere), percolationFraction, rainHours, lateralMultiplier, aspectStrength, coverStrength
                 ├── RunStatus.ts
-                ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, drainage, leak
+                ├── RunSeries.ts               # dates, rain, pet, moisture; optional infiltration, runoff, evaporation, inflow, surfaceFlow, subsurfaceLateralFlow, percolation
                 ├── CurveModel.ts              # "campbell" | "van_genuchten", and CURVE_MODELS in that order
                 ├── TextureCurve.ts            # texture, theta per suction, thetaFc, thetaPwp, availableWater mm per m
                 ├── RetentionCurves.ts         # suction, fieldCapacity, wiltingPoint, models: per-model TextureCurve lists
                 ├── ColourScheme.ts            # "light" | "dark"
-                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation": what the terrain surface's colour encodes
+                ├── ColourBy.ts                # "moisture" | "relative" | "capacity" | "upslope" | "vegetation" | "earth": what the terrain surface's colour encodes; earth is the plain tone, for when the buckets carry the water
                 ├── TextureTriangle.ts         # textures, step, point columns (sand, silt, clay %, texture index, diameter, psiE, b), typical soils
                 ├── SoilColumn.ts              # textures, layerBounds, rootDepth, model, layers (top, bottom, texture, fraction, thicknessInRoots, mm), total
                 ├── Scores.ts                  # n, observedMean, modelledMean, bias, rmse, ubrmse, r, nse, kge; null where unscorable
                 ├── RunComparison.ts           # daysWritten, nPoints, nPaired, rootDepth, layers, stations, overall, byDate (date, t), byStation
                 ├── RunPairs.ts                # parallel Float32Array columns: t, row, col, station, observed, modelled
                 ├── MarkerSet.ts               # count, positions (3 per marker, m), colours (RGB per marker), radius (m)
-                └── MarkerMode.ts              # "none" | "observed" | "error": what the observation markers encode
+                ├── BucketSet.ts               # count, block, size (m), tops (3 per column, m), plantDepth and freeDepth (m), plantFill and freeFill (0..1)
+                ├── BucketStore.ts             # "both" | "plant" | "free": which store the bucket columns draw
+                └── MarkerMode.ts              # "none" | "observed" | "error" | "sensors": what the observation markers encode; sensors is the day's points in one plain red
 ```
 
 ### Tests

@@ -1,16 +1,19 @@
 .chart {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
   padding: 0.25rem 1rem 0.5rem;
   font-family: system-ui, sans-serif;
   font-size: 0.8rem;
 }
 
+/* Sized by the viewBox's own shape up to the height cap, so the box is the drawing and the legend sits beside it. */
 .svg {
-  width: 100%;
+  width: auto;
   height: auto;
+  max-width: 100%;
   max-height: 300px;
+  flex: 0 1 auto;
   display: block;
   cursor: crosshair;
 }
@@ -21,6 +24,7 @@
   gap: 0.35rem;
   justify-content: center;
   min-width: 9rem;
+  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
 }
 

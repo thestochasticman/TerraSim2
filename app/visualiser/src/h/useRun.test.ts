@@ -15,7 +15,7 @@ vi.mock("@/api/fetchMoistureDay", () => ({ fetchMoistureDay: (...a: unknown[]) =
 
 const { useRun, POLL_MS } = await import("./useRun");
 
-const request: RunRequest = { stub: "example", step: "bucket", leakFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0, coverStrength: 0, stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, treeRootDepth: null, writeEveryDays: 1, recordFluxes: true };
+const request: RunRequest = { stub: "example", step: "bucket", percolationFraction: 0, rainHours: 24, lateralMultiplier: 1, aspectStrength: 0, coverStrength: 0, stressExponent: 1, initialFullness: 0.5, rootDepth: 0.3, treeRootDepth: null, writeEveryDays: 1, recordFluxes: true };
 const base: RunStatus = { runId: "example-abc", status: "running", daysWritten: 0, nDays: 3, rows: 1, cols: 2, dates: ["a", "b", "c"] };
 const terrain = { rows: 1, cols: 2, cellSize: 10, elevation: Float64Array.from([1, 2]) };
 

@@ -10,6 +10,8 @@ import type { TerrainGrid } from "@/t/TerrainGrid";
 export const MARKER_LIFT = 0.6;
 /** A marker's radius in cell sizes. */
 export const MARKER_RADIUS = 0.45;
+/** The one colour of every marker in the "sensors" mode: a red that nothing else on the terrain uses, RGB in 0..1. */
+export const SENSOR_COLOUR: [number, number, number] = [0xd6 / 255, 0x27 / 255, 0x28 / 255];
 
 /**
  * The markers for one day's observations, placed on the terrain and coloured by mode.
@@ -21,7 +23,8 @@ export const MARKER_RADIUS = 0.45;
  * mode : MarkerMode
  *     "observed" colours each marker by its observed content on the sequential ramp over
  *     `ranges.observed`; "error" by modelled minus observed on the diverging ramp over
- *     ±`ranges.errorScale`, grey where the run has no value yet.
+ *     ±`ranges.errorScale`, grey where the run has no value yet; "sensors" gives every marker
+ *     SENSOR_COLOUR, whatever was read, and needs no scale.
  * ranges : the scales from computeComparisonRanges
  *
  * Returns a MarkerSet, or null when the mode is "none", nothing was observed that
@@ -43,7 +46,9 @@ export function buildObservationMarkers(grid: TerrainGrid, pairs: RunPairs, t: n
     positions[k * 3 + 1] = grid.elevation[row * grid.cols + col] + MARKER_LIFT * grid.cellSize;
     positions[k * 3 + 2] = row * grid.cellSize;
     let colour: [number, number, number];
-    if (mode === "observed") {
+    if (mode === "sensors") {
+      colour = SENSOR_COLOUR;
+    } else if (mode === "observed") {
       const { min, max } = ranges.observed as { min: number; max: number };
       colour = mapMoistureToColour(max > min ? (pairs.observed[i] - min) / (max - min) : 1);
     } else {
