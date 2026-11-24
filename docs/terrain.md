@@ -13,12 +13,13 @@
 | `slope` | (rows, cols), m/m | Drop to that neighbour divided by the centre-to-centre distance; 0 at outlets | `compute_flow_direction` |
 | `order` | (cells,), flat index | Every cell after all cells that drain into it | `compute_flow_order` |
 | `upslope_cells` | (rows, cols), count | Cells draining through each cell, itself included | `compute_upslope_cells` |
+| `flow_levels` | `(cells, bounds)`, flat indices | Cells grouped by the length of the longest flow path ending in each; every cell draining into a cell is in an earlier group | `compute_flow_levels` |
 | `surface_slope`, `aspect` | (rows, cols), rad | Tilt of the unfilled surface by central differences, and the downslope direction clockwise from north | `compute_slope_aspect` |
 | `solar_ratio` | (rows, cols), dimensionless | Direct clear-sky irradiance on the tilted surface summed over a year, divided by the same sum for a horizontal surface | `compute_solar_ratio` |
 
 ## Use in the model
 
-- The routed and subsurface steps pass water from each cell to `downstream[cell]`, visiting cells in `order`. One neighbour receives all of a cell's flow, so flow does not divide.
+- The routed and subsurface steps pass water from each cell to `downstream[cell]`, processing the groups of `flow_levels` in turn (`cascade_downhill`). One neighbour receives all of a cell's flow, so flow does not divide.
 - The subsurface step's lateral flow uses `slope` (the D8 slope), not `surface_slope`.
 - `solar_ratio` scales evaporative demand when `aspect_strength` is above 0 ([process-steps.md](process-steps.md)). It counts the direct beam only, with no diffuse light, no cloud and no shading by surrounding terrain. The sun's position is sampled at the middle of each hour of days 1 to 365, at the latitude in the manifest.
 - `upslope_cells` is used by the viewer's drainage colouring only.

@@ -49,12 +49,12 @@ Volumetric water content is θ = θwp + moisture / root depth (`compute_water_co
 
 ## Compute time
 
-The routed and subsurface steps visit cells one at a time in a Python loop. The figures below were measured on 24 November 2026 on the lab workstation, for one day of the subsurface step on each site's wettest day:
+The cascade is processed by flow level (pull request #33), replacing a loop over single cells. The figures below were measured on 24 November 2026 on the lab workstation, for one day of the subsurface step on each site's wettest day:
 
-| Site | Cells | ms per day |
-|---|---|---|
-| Tarrawarra | 6,984 | 29 |
-| Esdale | 70,180 | 117 |
-| MRI | 400,044 | 585 |
+| Site | Cells | Flow levels | Per-cell loop, ms per day | By level, ms per day |
+|---|---|---|---|---|
+| Tarrawarra | 6,984 | 100 | 29 | 4 |
+| Esdale | 70,180 | 389 | 117 | 15 |
+| MRI | 400,044 | 1,164 | 585 | 54 |
 
-A year of MRI took 224 s, which puts a full 2,078-day MRI run at about 21 minutes of stepping, before writing.
+A year of MRI takes 20 s, which puts a full 2,078-day MRI run at about 2 minutes of stepping, before writing to the store. Whole Esdale runs took 47 s with the loop and 7.5 s by level, with the same scores to four decimals.

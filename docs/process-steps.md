@@ -35,7 +35,7 @@ Parameters: `BucketModelParams(stress_exponent=1.0)`. Fluxes (`BucketFlux`): INF
 
 ## Routed bucket: `step_routed_bucket_model`
 
-The closed bucket, but rain that does not fit (excess) passes to `downstream[cell]` within the day. Cells are visited in flow order. Each cell takes what arrives up to its remaining room (INFLOW) and passes the rest on (SURFACE_FLOW). At an outlet, what passes on leaves the grid (RUNOFF).
+The closed bucket, but rain that does not fit (excess) passes to `downstream[cell]` within the day. Cells are processed upslope first (see Cascade order below). Each cell takes what arrives up to its remaining room (INFLOW) and passes the rest on (SURFACE_FLOW). At an outlet, what passes on leaves the grid (RUNOFF).
 
 Balance per cell: new − old = infiltration + inflow − evaporation. Over the grid: total excess = total inflow + total runoff.
 
@@ -56,7 +56,7 @@ The two ranges are not separate depths. `moisture` is their sum. In one day:
 2. **Lateral flow and percolation.** Both are computed from the free water after infiltration, F = max(store − capacity, 0), at the Campbell conductivity K(θ) for θ = θfc + F / root depth:
    - SUBSURFACE_LATERAL_FLOW = min(m × K(θ) × g × slope × root depth / cell size × 86400, F), with m = `lateral_multiplier`. This is Darcy flow with a gravity gradient equal to the D8 slope, through a face one cell wide and one root depth high. The face width is one cell size in every direction, which overstates diagonal flow by up to √2.
    - PERCOLATION = min(K(θ) × g × p × 86400, F − lateral flow), with p = `percolation_fraction`. Percolated water leaves the model.
-3. **Cascade.** Cells are visited in flow order. A cell first takes lateral flow arriving from upslope, up to its remaining room. It then takes surface water arriving from upslope, up to the room still left and the part of L not used in step 1. The sum is INFLOW. Untaken arrivals plus the cell's own excess pass to `downstream[cell]` over the surface (SURFACE_FLOW), and the cell's own lateral flow passes through the soil. At an outlet, both leave the grid (RUNOFF).
+3. **Cascade.** Cells are processed upslope first. A cell first takes lateral flow arriving from upslope, up to its remaining room. It then takes surface water arriving from upslope, up to the room still left and the part of L not used in step 1. The sum is INFLOW. Untaken arrivals plus the cell's own excess pass to `downstream[cell]` over the surface (SURFACE_FLOW), and the cell's own lateral flow passes through the soil. At an outlet, both leave the grid (RUNOFF).
 4. **Evapotranspiration.** EVAPORATION = min(D × f^s, store), where f = min(store, capacity) / capacity and D = pet × `solar_ratio`^`aspect_strength`. It is subtracted from the cell's total, so it removes free water first whenever free water is present.
 
 Balance per cell: new − old = infiltration + inflow − lateral flow − percolation − evaporation. SURFACE_FLOW is water passing between cells. It does not enter the per-cell or grid balance, and on a cell it may count water that also appears in the surface flow of cells further down.
@@ -66,6 +66,10 @@ Parameters: `SubsurfaceBucketParams(stress_exponent=1.0, percolation_fraction=0.
 The step calls `require_conductivity()` and fails on inputs without a retention curve.
 
 Lateral flow and percolation are computed once per day from the state after infiltration. A cell's outflow therefore does not respond to water arriving the same day, and nothing limits how far water travels in a day.
+
+## Cascade order
+
+`cascade_downhill` processes the groups of `TerrainDerivatives.flow_levels` in turn, all cells of a group at once. Every cell that drains into a cell lies in an earlier group, so arrivals are complete before a cell is processed. The result is the same as visiting cells one at a time in flow order. The only difference is the order in which arrivals at a cell are summed, which changes results in the last bits of a float64. The test of `cascade_downhill` compares it with a one-cell-at-a-time reference.
 
 ## Settings applied outside the step
 

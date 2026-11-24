@@ -58,10 +58,12 @@ Of all these files, 166 carry their own test. The "Recorded result" column repea
 
 ## After 8 November
 
-| PR | State on 24 November 2026 (from git) | Content |
+| PR | State on 24 November 2026 | Content |
 |---|---|---|
-| 29 | not merged | These pages |
-| 30 | not merged | Fluxes named by process: `SUBSURFACE_LATERAL_FLOW` and `PERCOLATION` (with `percolation_fraction`) replace `DRAINAGE` and `LEAK`; the routed and subsurface steps record `SURFACE_FLOW` |
+| 29 | merged with these pages | These pages |
+| 30 | merged | Fluxes named by process: `SUBSURFACE_LATERAL_FLOW` and `PERCOLATION` (with `percolation_fraction`) replace `DRAINAGE` and `LEAK`; the routed and subsurface steps record `SURFACE_FLOW` |
 | 31 | merged into `main` | MIT licence |
+| 33 | merged | The within-day cascade processed by flow level: one day of MRI 585 → 54 ms, results equal to the per-cell loop up to float summation order |
+| 34 | merged | Viewer: bucket columns under the terrain, a store select, an earth-tone colouring, red sensor markers, a scrolling run page, and a corrected chart hover |
 
 Settings and scores per site are in [evaluation.md](evaluation.md).

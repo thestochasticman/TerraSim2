@@ -28,7 +28,7 @@ python app/api/tests.py --all      # PASS / SKIP / FAIL
 cd app/visualiser && npm test      # vitest
 ```
 
-A file's hash is recorded only when its `t()` passes. On 24 November 2026, with the code at `4f45710`, all 64 `terrasim2` files and all 21 `app/api` files passed.
+A file's hash is recorded only when its `t()` passes. On 24 November 2026, at `b8eebfc`, all 66 `terrasim2` files, all 21 `app/api` files and all 258 viewer tests in 63 files passed.
 
 No continuous integration runs these tests. Tests confirm each unit's behaviour on small hand-computed or random cases. Physical correctness rests on the cited equations and on the evaluation in [evaluation.md](evaluation.md).
 
@@ -36,7 +36,7 @@ No continuous integration runs these tests. Tests confirm each unit's behaviour 
 
 - Work goes on feature branches, one pull request each.
 - `main` received pull requests 1 to 13 and 31.
-- `soil-physics-with-python` is a long-lived branch for work following *Soil Physics with Python*. It received pull requests 14 to 28. Work for it branches from it and returns to it by pull request.
+- `soil-physics-with-python` is a long-lived branch for work following *Soil Physics with Python*. It received pull requests 14 to 28, 30, 33 and 34. Work for it branches from it and returns to it by pull request.
 - There is no `dev` branch and there are no release tags.
 
 ## Conventions

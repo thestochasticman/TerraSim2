@@ -6,7 +6,7 @@
 
 TerraSim2 is a daily soil-water balance of the root zone on a 10 m grid. It consists of a model package, an input-preparation package that reads the lab's data stores, a web service that runs the model, and a viewer.
 
-These pages describe the code at commit `4f45710` on branch `rename/flux-terms` (pull request #30). The branch these pages sit on, `docs/modular`, does not contain that commit. On `docs/modular` the subsurface step's fluxes are still named `DRAINAGE` and `LEAK`, and the parameter is `leak_fraction`.
+These pages describe the code on `soil-physics-with-python` at commit `b8eebfc`.
 
 ## Scope
 

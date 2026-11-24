@@ -28,16 +28,18 @@ npm run lint
 
 ## Run page
 
-A control bar sets the site, step and request fields ([service.md](service.md)), and the run button posts the request. While the run writes, the view follows the newest day written. When the run is complete, the day scrubber can play or seek.
+A control bar, which wraps onto further lines as needed, sets the site, step and request fields ([service.md](service.md)), and the run button posts the request. The scene takes 64 % of the viewport height and the page scrolls to the chart and comparison. The camera looks at a point 0.15 of the grid's longer side below the mid elevation, so the terrain sits in the upper part of the canvas. While the run writes, the view follows the newest day written. When the run is complete, the day scrubber can play or seek.
 
 - **Terrain** (`TerrainScene`, `TerrainSurface`): a Three.js mesh with orbit controls. Vertex colour shows one of:
   - moisture as a fraction of capacity (of capacity plus free capacity for the subsurface step);
   - moisture stretched over the shown day's own range;
   - capacity;
   - log of upslope cells;
-  - vegetation class.
-- **Observation markers** (`ObservationMarkers`): spheres at the shown day's observation cells, hidden or coloured by observed content or by modelled minus observed.
-- **Series chart** (`SeriesChart`): grid-mean stored water as a line, and the day's fluxes as bars above and below zero. It supports hover, click to seek, drag to zoom and double-click to reset.
+  - vegetation class;
+  - a plain earth tone (no data), for use with the bucket columns.
+- **Observation markers** (`ObservationMarkers`): spheres at the shown day's observation cells, hidden, coloured by observed content, by modelled minus observed, or drawn in one red.
+- **Bucket columns** (`BucketColumns`, `buildBucketColumns`, `selectBucketStore`): with the buckets select set to each cell, 5 × 5 or 10 × 10 cells, one column hangs under the surface per block, and the surface is drawn at 30 % opacity. Column height is proportional to the block's mean capacity (plus mean free capacity for the subsurface step), scaled so the largest column is 0.12 of the grid's longer side. Within a column, the plant store fills from the bottom and the free store above it, from the block's mean moisture on the shown day. For a subsurface run, a store select shows both stores, the plant store alone or the free store alone, on the same scale. The two fills are ranges of water content in one root zone, drawn one above the other; they are not depths in the soil.
+- **Series chart** (`SeriesChart`): grid-mean stored water as a line, and the day's fluxes as bars above and below zero, with the legend beside the chart. It supports hover, click to seek, drag to zoom and double-click to reset. Mouse positions are mapped through the SVG's rendered scale and offset (`computeSvgScale`).
 - **Comparison** (`ComparisonView`), for sites with observations: whole-run scores, a table per date that seeks on click, and a scatter of modelled against observed with the shown day highlighted.
 
 Scores on this page come from the service's comparison route and differ from [evaluation.md](evaluation.md) for the reasons given in [service.md](service.md).

@@ -1,6 +1,6 @@
 # TerraSim2 documentation
 
-These pages describe the code at commit `4f45710` on branch `rename/flux-terms` (pull request #30, not merged on 24 November 2026). Statements were checked against that code on 24 November 2026. Where a page reports a result that was not reproduced on that date, it says so. Where the pages and the code disagree, the code is authoritative, and the page is in error.
+These pages describe the code on `soil-physics-with-python` at commit `b8eebfc` (after pull requests #30, #33 and #34). Statements were checked against that code on 24 November 2026. Where a page reports a result that was not reproduced on that date, it says so. Where the pages and the code disagree, the code is authoritative, and the page is in error.
 
 `CLAUDE.md` at the repository root is the compact reference and file tree.
 
@@ -17,9 +17,9 @@ These pages describe the code at commit `4f45710` on branch `rename/flux-terms` 
 9. **[Evaluation](evaluation.md)**: settings and scores at five sites, with provenance and limitations
 10. **[Ingest](ingest.md)**: `troi_ingest`, sources and treatment
 11. **[Service](service.md)**: `app/api`, the run request, routes, known limitations
-12. **[Visualiser](visualiser.md)**: `app/visualiser`, pages and structure
+12. **[Visualiser](visualiser.md)**: `app/visualiser`, pages, the bucket view and structure
 13. **[Development](development.md)**: environment, tests, branches, regenerating data
-14. **[History](history.md)**: pull requests 1 to 31
+14. **[History](history.md)**: pull requests 1 to 34
 
 ## Sections
 
@@ -54,6 +54,7 @@ These pages describe the code at commit `4f45710` on branch `rename/flux-terms` 
 - [Closed bucket: `step_bucket_model`](process-steps.md#closed-bucket-step_bucket_model)
 - [Routed bucket: `step_routed_bucket_model`](process-steps.md#routed-bucket-step_routed_bucket_model)
 - [Subsurface step: `step_subsurface_bucket_model`](process-steps.md#subsurface-step-step_subsurface_bucket_model)
+- [Cascade order](process-steps.md#cascade-order)
 - [Settings applied outside the step](process-steps.md#settings-applied-outside-the-step)
 - [Not represented](process-steps.md#not-represented)
 
